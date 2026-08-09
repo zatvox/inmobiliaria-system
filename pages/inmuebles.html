@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Inmuebles · Gestión Inmobiliaria</title>
+<link rel="stylesheet" href="../assets/css/variables.css" />
+<link rel="stylesheet" href="../assets/css/styles.css" />
+<link rel="stylesheet" href="../assets/css/components.css" />
+<link rel="stylesheet" href="../assets/css/responsive.css" />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
+</head>
+<body data-page="inmuebles">
+  <div class="app-shell">
+    <div class="sidebar-backdrop"></div>
+    <aside class="sidebar">
+      <div class="sidebar-brand">
+        <div class="logo-mark">GI</div>
+        <span>Gestión Inmobiliaria</span>
+      </div>
+      <nav class="sidebar-nav" aria-label="Navegación principal">
+        <div class="nav-section-title">Operación</div>
+        <a class="nav-link" data-page="dashboard" href="../index.html"><span class="nav-icon">🏠</span> Dashboard</a>
+        <a class="nav-link" data-page="inmuebles" href="inmuebles.html"><span class="nav-icon">🏢</span> Inmuebles</a>
+        <a class="nav-link" data-page="personas" href="personas.html"><span class="nav-icon">👥</span> Personas</a>
+        <a class="nav-link" aria-disabled="true" href="#"><span class="nav-icon">📄</span> Contratos <span class="badge-soon">Fase 2</span></a>
+        <a class="nav-link" aria-disabled="true" href="#"><span class="nav-icon">💰</span> Cobranzas <span class="badge-soon">Fase 3</span></a>
+        <a class="nav-link" aria-disabled="true" href="#"><span class="nav-icon">💳</span> Pagos <span class="badge-soon">Fase 3</span></a>
+        <a class="nav-link" aria-disabled="true" href="#"><span class="nav-icon">⚡</span> Cálculo de Servicios <span class="badge-soon">Fase 3</span></a>
+        <div class="nav-section-title">Comercial</div>
+        <a class="nav-link" aria-disabled="true" href="#"><span class="nav-icon">📈</span> Ventas <span class="badge-soon">Fase 4</span></a>
+        <a class="nav-link" aria-disabled="true" href="#"><span class="nav-icon">📁</span> Documentos <span class="badge-soon">Fase 4</span></a>
+        <a class="nav-link" aria-disabled="true" href="#"><span class="nav-icon">📊</span> Reportes <span class="badge-soon">Fase 4</span></a>
+        <div class="nav-section-title">Sistema</div>
+        <a class="nav-link" aria-disabled="true" href="#"><span class="nav-icon">⚙️</span> Configuración <span class="badge-soon">Fase 5</span></a>
+      </nav>
+      <div class="sidebar-footer">Fase 1 · v0.1</div>
+    </aside>
+
+    <div class="main-area">
+      <header class="topbar">
+        <div style="display:flex; align-items:center; gap:12px;">
+          <button class="sidebar-toggle" aria-label="Abrir menú">☰</button>
+          <span class="topbar-title">Inmuebles</span>
+        </div>
+        <div class="topbar-user">
+          <div class="user-chip">
+            <div class="user-avatar" id="user-avatar">?</div>
+            <div>
+              <div id="user-name" style="font-weight:600;">Cargando…</div>
+              <div id="user-role" style="font-size:12px; color:var(--gray-500);"></div>
+            </div>
+          </div>
+          <button class="btn btn-tertiary btn-sm" id="logout-btn">Salir</button>
+        </div>
+      </header>
+
+      <main class="content">
+        <!-- ===================== VISTA: LISTADO DE PROPIEDADES ===================== -->
+        <section id="view-list">
+          <div class="page-header">
+            <div>
+              <h1>Inmuebles</h1>
+              <p class="subtitle">Predios y edificios. Cada uno se divide en secciones (pisos, deptos, lotes) que son la unidad real que se alquila o vende.</p>
+            </div>
+            <button class="btn btn-primary" id="btn-nueva-propiedad" data-admin-only>+ Nueva propiedad</button>
+          </div>
+
+          <div style="margin-bottom:16px; max-width:360px;">
+            <input type="text" id="search-input" placeholder="Buscar por nombre, dirección o distrito…" />
+          </div>
+
+          <div id="propiedades-grid" class="kpi-grid" style="grid-template-columns:repeat(auto-fill, minmax(280px,1fr));">
+            <div class="card skeleton" style="height:220px;"></div>
+            <div class="card skeleton" style="height:220px;"></div>
+            <div class="card skeleton" style="height:220px;"></div>
+          </div>
+        </section>
+
+        <!-- ===================== VISTA: DETALLE DE PROPIEDAD ===================== -->
+        <section id="view-detail" style="display:none;">
+          <div class="breadcrumbs">
+            <a href="#" id="back-to-list">← Inmuebles</a>
+          </div>
+          <div class="page-header">
+            <div>
+              <h1 id="detail-nombre">—</h1>
+              <p class="subtitle" id="detail-direccion">—</p>
+            </div>
+            <div style="display:flex; gap:8px;" data-admin-only>
+              <button class="btn btn-secondary" id="btn-editar-propiedad">Editar</button>
+              <button class="btn btn-danger" id="btn-eliminar-propiedad">Eliminar</button>
+            </div>
+          </div>
+
+          <div class="card" id="detail-info-card" style="margin-bottom:20px;"></div>
+
+          <div class="tabs">
+            <button class="tab-btn active" data-tab="secciones">Secciones</button>
+            <button class="tab-btn" data-tab="fotos">Fotos</button>
+          </div>
+
+          <div id="tab-secciones">
+            <div class="page-header" style="margin-bottom:12px;">
+              <p class="subtitle" style="margin:0;">Pisos, departamentos, lotes u oficinas dentro de este inmueble.</p>
+              <button class="btn btn-primary btn-sm" id="btn-nueva-seccion" data-admin-only>+ Nueva sección</button>
+            </div>
+            <div id="secciones-list"></div>
+          </div>
+
+          <div id="tab-fotos" style="display:none;">
+            <div class="upload-dropzone" id="foto-dropzone" data-admin-only>
+              📷 Haz clic o arrastra fotos aquí (fachada, ambientes, medidores generales…)
+              <input type="file" id="foto-input" accept="image/*" multiple style="display:none;" />
+            </div>
+            <div class="photo-grid" id="fotos-grid" style="margin-top:16px;"></div>
+          </div>
+        </section>
+      </main>
+    </div>
+  </div>
+
+  <!-- ============================ MODAL: PROPIEDAD ============================ -->
+  <div class="modal-overlay" id="modal-propiedad" aria-hidden="true">
+    <div class="modal">
+      <div class="modal-header">
+        <h3 id="modal-propiedad-title">Nueva propiedad</h3>
+        <button class="modal-close" data-modal-close aria-label="Cerrar">×</button>
+      </div>
+      <form id="form-propiedad">
+        <div class="modal-body">
+          <div class="form-grid">
+            <div class="form-field full">
+              <label for="p-nombre">Nombre referencial *</label>
+              <input type="text" id="p-nombre" required placeholder='Ej. "Edificio República de Polonia 721"' />
+              <div class="error-msg">Ingresa un nombre para identificar el inmueble.</div>
+            </div>
+            <div class="form-field full">
+              <label for="p-direccion">Dirección *</label>
+              <input type="text" id="p-direccion" required placeholder="Av./Calle, número, referencia" />
+              <div class="error-msg">Ingresa la dirección.</div>
+            </div>
+            <div class="form-field">
+              <label for="p-tipo">Tipo</label>
+              <select id="p-tipo"><option value="">Selecciona…</option></select>
+            </div>
+            <div class="form-field">
+              <label for="p-distrito">Distrito</label>
+              <select id="p-distrito"><option value="">Selecciona…</option></select>
+            </div>
+            <div class="form-field">
+              <label for="p-zona">Zona / referencia</label>
+              <input type="text" id="p-zona" />
+            </div>
+            <div class="form-field">
+              <label for="p-npisos">N° de pisos</label>
+              <input type="number" id="p-npisos" min="0" />
+            </div>
+            <div class="form-field">
+              <label for="p-area-terreno">Área de terreno (m²)</label>
+              <input type="number" id="p-area-terreno" min="0" step="0.01" />
+            </div>
+            <div class="form-field">
+              <label for="p-area-construida">Área construida (m²)</label>
+              <input type="number" id="p-area-construida" min="0" step="0.01" />
+            </div>
+            <div class="form-field">
+              <label for="p-anio">Año de construcción</label>
+              <input type="number" id="p-anio" min="1900" max="2100" />
+            </div>
+            <div class="form-field">
+              <label for="p-partida">Partida registral</label>
+              <input type="text" id="p-partida" />
+            </div>
+            <div class="form-field full">
+              <label for="p-propietario">Propietario</label>
+              <select id="p-propietario"><option value="">Selecciona…</option></select>
+              <div class="hint">Si no aparece, créalo primero en Personas con el rol "propietario".</div>
+            </div>
+            <div class="form-field full">
+              <label for="p-notas">Notas</label>
+              <textarea id="p-notas" placeholder="Datos pendientes de confirmar, referencias, etc."></textarea>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-tertiary" data-modal-close>Cancelar</button>
+          <button type="submit" class="btn btn-primary" id="btn-guardar-propiedad">Guardar propiedad</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ============================ MODAL: SECCIÓN ============================ -->
+  <div class="modal-overlay" id="modal-seccion" aria-hidden="true">
+    <div class="modal">
+      <div class="modal-header">
+        <h3 id="modal-seccion-title">Nueva sección</h3>
+        <button class="modal-close" data-modal-close aria-label="Cerrar">×</button>
+      </div>
+      <form id="form-seccion">
+        <div class="modal-body">
+          <div class="form-grid">
+            <div class="form-field full">
+              <label for="s-nombre">Nombre *</label>
+              <input type="text" id="s-nombre" required placeholder='Ej. "Piso 1-2 (Dúplex)", "Depto 301", "Lote 15"' />
+              <div class="error-msg">Ingresa un nombre para la sección.</div>
+            </div>
+            <div class="form-field">
+              <label for="s-tipo">Tipo de sección *</label>
+              <select id="s-tipo" required>
+                <option value="">Selecciona…</option>
+                <option value="piso">Piso</option>
+                <option value="departamento">Departamento</option>
+                <option value="duplex">Dúplex</option>
+                <option value="lote">Lote</option>
+                <option value="oficina">Oficina</option>
+                <option value="almacen">Almacén</option>
+                <option value="local">Local</option>
+                <option value="otro">Otro</option>
+              </select>
+              <div class="error-msg">Selecciona un tipo.</div>
+            </div>
+            <div class="form-field">
+              <label for="s-estado">Estado *</label>
+              <select id="s-estado" required>
+                <option value="disponible">Disponible</option>
+                <option value="en_alquiler">En alquiler</option>
+                <option value="alquilado">Alquilado</option>
+                <option value="en_venta">En venta</option>
+                <option value="vendido">Vendido</option>
+                <option value="reservado">Reservado</option>
+                <option value="inactivo">Inactivo</option>
+              </select>
+            </div>
+            <div class="form-field">
+              <label for="s-area">Área (m²)</label>
+              <input type="number" id="s-area" min="0" step="0.01" />
+            </div>
+            <div class="form-field">
+              <label for="s-habitaciones">Habitaciones</label>
+              <input type="number" id="s-habitaciones" min="0" />
+            </div>
+            <div class="form-field">
+              <label for="s-banos">Baños</label>
+              <input type="number" id="s-banos" min="0" />
+            </div>
+            <div class="form-field">
+              <label for="s-cocheras">Cocheras</label>
+              <input type="number" id="s-cocheras" min="0" />
+            </div>
+            <div class="form-field">
+              <label for="s-precio-alquiler">Precio de alquiler referencial (S/)</label>
+              <input type="number" id="s-precio-alquiler" min="0" step="0.01" />
+            </div>
+            <div class="form-field">
+              <label for="s-precio-venta">Precio de venta (S/)</label>
+              <input type="number" id="s-precio-venta" min="0" step="0.01" />
+            </div>
+            <div class="form-field full">
+              <label>Medidores propios</label>
+              <div style="display:flex; gap:20px;">
+                <div class="checkbox-row"><input type="checkbox" id="s-medidor-luz" /><label for="s-medidor-luz" style="font-weight:400;">Tiene medidor propio de luz</label></div>
+                <div class="checkbox-row"><input type="checkbox" id="s-medidor-agua" /><label for="s-medidor-agua" style="font-weight:400;">Tiene medidor propio de agua</label></div>
+              </div>
+              <div class="hint">Si no tiene medidor propio, su consumo se calculará por tarifa fija según cantidad de personas (módulo Cálculo de Servicios, Fase 3).</div>
+            </div>
+            <div class="form-field full">
+              <label for="s-notas">Notas</label>
+              <textarea id="s-notas"></textarea>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-tertiary" data-modal-close>Cancelar</button>
+          <button type="submit" class="btn btn-primary" id="btn-guardar-seccion">Guardar sección</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script type="module" src="../assets/js/inmuebles.js"></script>
+</body>
+</html>

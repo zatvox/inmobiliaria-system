@@ -1,0 +1,74 @@
+/* ============================================================================
+   VARIABLES DE DISEÑO — Sistema de Gestión Inmobiliaria
+   Paleta: azul profundo (confianza/solidez) + verde (positivo) + ámbar/rojo (alertas)
+   ============================================================================ */
+:root {
+  /* Color primario */
+  --color-primary: #1B3A5C;
+  --color-primary-dark: #12283f;
+  --color-primary-light: #2c5480;
+  --color-primary-50: #eaf0f6;
+
+  /* Color secundario / acento */
+  --color-accent: #C9A227;
+  --color-accent-dark: #a3831e;
+
+  /* Estados */
+  --color-success: #2E7D4F;
+  --color-success-bg: #e7f4ec;
+  --color-warning: #C77700;
+  --color-warning-bg: #fdf1e0;
+  --color-danger: #C0392B;
+  --color-danger-bg: #fbe9e7;
+  --color-info: #2472B8;
+  --color-info-bg: #e7f1fb;
+
+  /* Neutrales (5 tonos) */
+  --gray-900: #1A1F26;
+  --gray-700: #3D4451;
+  --gray-500: #6B7280;
+  --gray-300: #D1D5DB;
+  --gray-100: #F3F4F6;
+  --white: #FFFFFF;
+
+  /* Tipografía */
+  --font-heading: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-body: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+
+  --fs-xs: 0.75rem;
+  --fs-sm: 0.875rem;
+  --fs-base: 1rem;
+  --fs-lg: 1.125rem;
+  --fs-xl: 1.375rem;
+  --fs-2xl: 1.75rem;
+  --fs-3xl: 2.25rem;
+
+  /* Espaciado */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+  --space-8: 48px;
+
+  /* Bordes / sombras */
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 16px;
+  --shadow-sm: 0 1px 2px rgba(26,31,38,0.06), 0 1px 3px rgba(26,31,38,0.08);
+  --shadow-md: 0 4px 10px rgba(26,31,38,0.08), 0 2px 4px rgba(26,31,38,0.06);
+  --shadow-lg: 0 12px 28px rgba(26,31,38,0.14);
+
+  /* Layout */
+  --sidebar-width: 260px;
+  --header-height: 64px;
+  --transition-fast: 150ms ease;
+  --transition-base: 220ms ease;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: light;
+  }
+}

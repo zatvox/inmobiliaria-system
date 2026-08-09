@@ -1,0 +1,47 @@
+/* ============================================================================
+   RESPONSIVE — breakpoints: 320, 640, 1024, 1440, 1920
+   Mobile-first: estilos base ya son mobile; aqui se expande hacia arriba
+   y se ajusta el layout de escritorio (sidebar fija) hacia abajo.
+   ============================================================================ */
+
+/* Base (< 640px): sidebar oculta tipo drawer, KPIs en 1 columna */
+.kpi-grid { grid-template-columns: 1fr; }
+.form-grid { grid-template-columns: 1fr; }
+.sidebar { transform: translateX(-100%); }
+.sidebar.open { transform: translateX(0); box-shadow: var(--shadow-lg); }
+.main-area { margin-left: 0; }
+.sidebar-toggle { display: inline-flex; align-items: center; justify-content: center; }
+.sidebar-backdrop { display: none; position: fixed; inset: 0; background: rgba(26,31,38,0.4); z-index: 39; }
+.sidebar-backdrop.open { display: block; }
+
+/* >= 640px: KPIs en 2 columnas */
+@media (min-width: 640px) {
+  .kpi-grid { grid-template-columns: repeat(2, 1fr); }
+  .form-grid { grid-template-columns: repeat(2, 1fr); }
+}
+
+/* >= 1024px: layout de escritorio con sidebar fija */
+@media (min-width: 1024px) {
+  .sidebar { transform: translateX(0); }
+  .main-area { margin-left: var(--sidebar-width); }
+  .sidebar-toggle { display: none; }
+  .sidebar-backdrop { display: none !important; }
+  .kpi-grid { grid-template-columns: repeat(4, 1fr); }
+}
+
+/* >= 1440px: mas aire en el contenido */
+@media (min-width: 1440px) {
+  .content { padding: var(--space-6) var(--space-8); }
+}
+
+/* >= 1920px: limitar ancho maximo de lectura en pantallas muy grandes */
+@media (min-width: 1920px) {
+  .content { max-width: 1760px; margin: 0 auto; }
+}
+
+/* Tablas en movil: permitir scroll horizontal suave */
+@media (max-width: 640px) {
+  table.data-table { font-size: var(--fs-xs); }
+  .page-header { flex-direction: column; align-items: stretch; }
+  .modal { max-width: 100%; }
+}

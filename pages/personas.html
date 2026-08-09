@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Personas · Gestión Inmobiliaria</title>
+<link rel="stylesheet" href="../assets/css/variables.css" />
+<link rel="stylesheet" href="../assets/css/styles.css" />
+<link rel="stylesheet" href="../assets/css/components.css" />
+<link rel="stylesheet" href="../assets/css/responsive.css" />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
+</head>
+<body data-page="personas">
+  <div class="app-shell">
+    <div class="sidebar-backdrop"></div>
+    <aside class="sidebar">
+      <div class="sidebar-brand">
+        <div class="logo-mark">GI</div>
+        <span>Gestión Inmobiliaria</span>
+      </div>
+      <nav class="sidebar-nav" aria-label="Navegación principal">
+        <div class="nav-section-title">Operación</div>
+        <a class="nav-link" data-page="dashboard" href="../index.html"><span class="nav-icon">🏠</span> Dashboard</a>
+        <a class="nav-link" data-page="inmuebles" href="inmuebles.html"><span class="nav-icon">🏢</span> Inmuebles</a>
+        <a class="nav-link" data-page="personas" href="personas.html"><span class="nav-icon">👥</span> Personas</a>
+        <a class="nav-link" aria-disabled="true" href="#"><span class="nav-icon">📄</span> Contratos <span class="badge-soon">Fase 2</span></a>
+        <a class="nav-link" aria-disabled="true" href="#"><span class="nav-icon">💰</span> Cobranzas <span class="badge-soon">Fase 3</span></a>
+        <a class="nav-link" aria-disabled="true" href="#"><span class="nav-icon">💳</span> Pagos <span class="badge-soon">Fase 3</span></a>
+        <a class="nav-link" aria-disabled="true" href="#"><span class="nav-icon">⚡</span> Cálculo de Servicios <span class="badge-soon">Fase 3</span></a>
+        <div class="nav-section-title">Comercial</div>
+        <a class="nav-link" aria-disabled="true" href="#"><span class="nav-icon">📈</span> Ventas <span class="badge-soon">Fase 4</span></a>
+        <a class="nav-link" aria-disabled="true" href="#"><span class="nav-icon">📁</span> Documentos <span class="badge-soon">Fase 4</span></a>
+        <a class="nav-link" aria-disabled="true" href="#"><span class="nav-icon">📊</span> Reportes <span class="badge-soon">Fase 4</span></a>
+        <div class="nav-section-title">Sistema</div>
+        <a class="nav-link" aria-disabled="true" href="#"><span class="nav-icon">⚙️</span> Configuración <span class="badge-soon">Fase 5</span></a>
+      </nav>
+      <div class="sidebar-footer">Fase 1 · v0.1</div>
+    </aside>
+
+    <div class="main-area">
+      <header class="topbar">
+        <div style="display:flex; align-items:center; gap:12px;">
+          <button class="sidebar-toggle" aria-label="Abrir menú">☰</button>
+          <span class="topbar-title">Personas</span>
+        </div>
+        <div class="topbar-user">
+          <div class="user-chip">
+            <div class="user-avatar" id="user-avatar">?</div>
+            <div>
+              <div id="user-name" style="font-weight:600;">Cargando…</div>
+              <div id="user-role" style="font-size:12px; color:var(--gray-500);"></div>
+            </div>
+          </div>
+          <button class="btn btn-tertiary btn-sm" id="logout-btn">Salir</button>
+        </div>
+      </header>
+
+      <main class="content">
+        <div class="page-header">
+          <div>
+            <h1>Personas</h1>
+            <p class="subtitle">Ficha única reutilizable: la misma persona puede ser inquilino, propietario, comprador o agente en distintos contratos.</p>
+          </div>
+          <button class="btn btn-primary" id="btn-nueva-persona" data-admin-only>+ Nueva persona</button>
+        </div>
+
+        <div style="display:flex; gap:12px; margin-bottom:16px; flex-wrap:wrap;">
+          <input type="text" id="search-input" placeholder="Buscar por nombre, DNI/RUC o email…" style="max-width:320px;" />
+          <select id="filter-rol" style="max-width:220px;">
+            <option value="">Todos los roles</option>
+            <option value="propietario">Propietario</option>
+            <option value="inquilino">Inquilino</option>
+            <option value="comprador">Comprador</option>
+            <option value="agente">Agente inmobiliario</option>
+            <option value="lead">Lead</option>
+            <option value="proveedor">Proveedor</option>
+          </select>
+        </div>
+
+        <div class="table-wrap">
+          <table class="data-table">
+            <thead>
+              <tr><th>Nombre</th><th>Documento</th><th>Contacto</th><th>Roles</th><th></th></tr>
+            </thead>
+            <tbody id="personas-tbody">
+              <tr><td colspan="5"><div class="skeleton" style="height:20px;"></div></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </main>
+    </div>
+  </div>
+
+  <!-- ============================ MODAL: PERSONA ============================ -->
+  <div class="modal-overlay" id="modal-persona" aria-hidden="true">
+    <div class="modal">
+      <div class="modal-header">
+        <h3 id="modal-persona-title">Nueva persona</h3>
+        <button class="modal-close" data-modal-close aria-label="Cerrar">×</button>
+      </div>
+      <form id="form-persona">
+        <div class="modal-body">
+          <div class="form-grid">
+            <div class="form-field full">
+              <label for="pe-nombre">Nombre completo *</label>
+              <input type="text" id="pe-nombre" required placeholder="Nombre y apellidos, o razón social" />
+              <div class="error-msg">Ingresa el nombre.</div>
+            </div>
+            <div class="form-field">
+              <label for="pe-tipo-doc">Tipo de documento</label>
+              <select id="pe-tipo-doc">
+                <option value="">Selecciona…</option>
+                <option value="DNI">DNI</option>
+                <option value="RUC">RUC</option>
+                <option value="CE">Carné de extranjería</option>
+                <option value="PASAPORTE">Pasaporte</option>
+                <option value="OTRO">Otro</option>
+              </select>
+            </div>
+            <div class="form-field">
+              <label for="pe-doc">N° de documento</label>
+              <input type="text" id="pe-doc" />
+            </div>
+            <div class="form-field">
+              <label for="pe-telefono">Teléfono</label>
+              <input type="tel" id="pe-telefono" />
+            </div>
+            <div class="form-field">
+              <label for="pe-email">Email</label>
+              <input type="email" id="pe-email" />
+            </div>
+            <div class="form-field full">
+              <label for="pe-direccion">Dirección</label>
+              <input type="text" id="pe-direccion" />
+            </div>
+            <div class="form-field full">
+              <label>Roles *</label>
+              <div style="display:flex; gap:16px; flex-wrap:wrap;">
+                <div class="checkbox-row"><input type="checkbox" class="rol-check" value="propietario" /><label style="font-weight:400;">Propietario</label></div>
+                <div class="checkbox-row"><input type="checkbox" class="rol-check" value="inquilino" /><label style="font-weight:400;">Inquilino</label></div>
+                <div class="checkbox-row"><input type="checkbox" class="rol-check" value="comprador" /><label style="font-weight:400;">Comprador</label></div>
+                <div class="checkbox-row"><input type="checkbox" class="rol-check" value="agente" /><label style="font-weight:400;">Agente inmobiliario</label></div>
+                <div class="checkbox-row"><input type="checkbox" class="rol-check" value="lead" /><label style="font-weight:400;">Lead</label></div>
+                <div class="checkbox-row"><input type="checkbox" class="rol-check" value="proveedor" /><label style="font-weight:400;">Proveedor</label></div>
+              </div>
+              <div class="hint" id="roles-hint" style="display:none; color:var(--color-danger);">Selecciona al menos un rol.</div>
+            </div>
+            <div class="form-field full">
+              <label for="pe-notas">Notas</label>
+              <textarea id="pe-notas" placeholder="Datos pendientes de completar, referencias, etc."></textarea>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-tertiary" data-modal-close>Cancelar</button>
+          <button type="submit" class="btn btn-primary" id="btn-guardar-persona">Guardar persona</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script type="module" src="../assets/js/personas.js"></script>
+</body>
+</html>

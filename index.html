@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Dashboard · Gestión Inmobiliaria</title>
+<meta name="description" content="Panel de administración de propiedades, contratos, cobranzas y servicios." />
+<link rel="stylesheet" href="assets/css/variables.css" />
+<link rel="stylesheet" href="assets/css/styles.css" />
+<link rel="stylesheet" href="assets/css/components.css" />
+<link rel="stylesheet" href="assets/css/responsive.css" />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
+</head>
+<body data-page="dashboard">
+  <div class="app-shell">
+    <div class="sidebar-backdrop"></div>
+    <aside class="sidebar">
+      <div class="sidebar-brand">
+        <div class="logo-mark">GI</div>
+        <span>Gestión Inmobiliaria</span>
+      </div>
+      <nav class="sidebar-nav" aria-label="Navegación principal">
+        <div class="nav-section-title">Operación</div>
+        <a class="nav-link" data-page="dashboard" href="index.html"><span class="nav-icon">🏠</span> Dashboard</a>
+        <a class="nav-link" data-page="inmuebles" href="pages/inmuebles.html"><span class="nav-icon">🏢</span> Inmuebles</a>
+        <a class="nav-link" data-page="personas" href="pages/personas.html"><span class="nav-icon">👥</span> Personas</a>
+        <a class="nav-link" aria-disabled="true" href="#"><span class="nav-icon">📄</span> Contratos <span class="badge-soon">Fase 2</span></a>
+        <a class="nav-link" aria-disabled="true" href="#"><span class="nav-icon">💰</span> Cobranzas <span class="badge-soon">Fase 3</span></a>
+        <a class="nav-link" aria-disabled="true" href="#"><span class="nav-icon">💳</span> Pagos <span class="badge-soon">Fase 3</span></a>
+        <a class="nav-link" aria-disabled="true" href="#"><span class="nav-icon">⚡</span> Cálculo de Servicios <span class="badge-soon">Fase 3</span></a>
+        <div class="nav-section-title">Comercial</div>
+        <a class="nav-link" aria-disabled="true" href="#"><span class="nav-icon">📈</span> Ventas <span class="badge-soon">Fase 4</span></a>
+        <a class="nav-link" aria-disabled="true" href="#"><span class="nav-icon">📁</span> Documentos <span class="badge-soon">Fase 4</span></a>
+        <a class="nav-link" aria-disabled="true" href="#"><span class="nav-icon">📊</span> Reportes <span class="badge-soon">Fase 4</span></a>
+        <div class="nav-section-title">Sistema</div>
+        <a class="nav-link" aria-disabled="true" href="#"><span class="nav-icon">⚙️</span> Configuración <span class="badge-soon">Fase 5</span></a>
+      </nav>
+      <div class="sidebar-footer">Fase 1 · v0.1</div>
+    </aside>
+
+    <div class="main-area">
+      <header class="topbar">
+        <div style="display:flex; align-items:center; gap:12px;">
+          <button class="sidebar-toggle" aria-label="Abrir menú">☰</button>
+          <span class="topbar-title">Dashboard</span>
+        </div>
+        <div class="topbar-user">
+          <div class="user-chip">
+            <div class="user-avatar" id="user-avatar">?</div>
+            <div>
+              <div id="user-name" style="font-weight:600;">Cargando…</div>
+              <div id="user-role" style="font-size:12px; color:var(--gray-500);"></div>
+            </div>
+          </div>
+          <button class="btn btn-tertiary btn-sm" id="logout-btn">Salir</button>
+        </div>
+      </header>
+
+      <main class="content">
+        <div class="page-header">
+          <div>
+            <h1>Resumen general</h1>
+            <p class="subtitle">Vista rápida del estado de tu cartera de inmuebles.</p>
+          </div>
+        </div>
+
+        <div class="kpi-grid" id="kpi-grid">
+          <div class="kpi-card"><div class="kpi-label">Propiedades</div><div class="kpi-value skeleton" style="height:2.25rem;">&nbsp;</div></div>
+          <div class="kpi-card"><div class="kpi-label">Secciones</div><div class="kpi-value skeleton" style="height:2.25rem;">&nbsp;</div></div>
+          <div class="kpi-card"><div class="kpi-label">Personas registradas</div><div class="kpi-value skeleton" style="height:2.25rem;">&nbsp;</div></div>
+          <div class="kpi-card"><div class="kpi-label">Contratos vigentes</div><div class="kpi-value skeleton" style="height:2.25rem;">&nbsp;</div></div>
+        </div>
+
+        <div class="card">
+          <div class="card-title">Secciones por estado</div>
+          <div id="estado-breakdown" style="display:flex; gap:10px; flex-wrap:wrap;">
+            <span class="skeleton" style="height:26px; width:120px; display:inline-block;"></span>
+          </div>
+        </div>
+
+        <div class="card" style="margin-top:20px;">
+          <div class="card-title">Plan de fases del sistema</div>
+          <p style="color:var(--gray-500); margin-bottom:16px;">Construcción por fases, revisando cada módulo antes de avanzar (acordado con Luis el 2026-08-04).</p>
+          <div class="table-wrap">
+            <table class="data-table">
+              <thead><tr><th>Fase</th><th>Módulos</th><th>Estado</th></tr></thead>
+              <tbody>
+                <tr><td>1</td><td>Esquema Supabase completo + Inmuebles + Secciones + Personas</td><td><span class="badge badge-alquilado">Entregado</span></td></tr>
+                <tr><td>2</td><td>Contratos de alquiler y venta + generación automática de cuotas</td><td><span class="badge badge-neutral">Pendiente</span></td></tr>
+                <tr><td>3</td><td>Cobranzas + Pagos (tab Servicios) + módulo Cálculo de Servicios</td><td><span class="badge badge-neutral">Pendiente</span></td></tr>
+                <tr><td>4</td><td>Ventas (pipeline), Documentos, Reportes</td><td><span class="badge badge-neutral">Pendiente</span></td></tr>
+                <tr><td>5</td><td>Configuración completa, plantillas de contrato PDF, Usuarios y Roles</td><td><span class="badge badge-neutral">Pendiente</span></td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </main>
+    </div>
+  </div>
+
+  <script type="module" src="assets/js/dashboard.js"></script>
+</body>
+</html>
