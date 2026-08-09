@@ -4,6 +4,7 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Ingresar · Gestión Inmobiliaria</title>
+<link rel="icon" href="data:,">
 <link rel="stylesheet" href="../assets/css/variables.css" />
 <link rel="stylesheet" href="../assets/css/styles.css" />
 <link rel="stylesheet" href="../assets/css/components.css" />
@@ -13,11 +14,9 @@
   body { background: var(--color-primary); display:flex; align-items:center; justify-content:center; min-height:100vh; padding: var(--space-4); }
   .login-card { background:var(--white); border-radius: var(--radius-lg); box-shadow: var(--shadow-lg); padding: var(--space-6); width:100%; max-width:400px; }
   .login-logo { width:52px; height:52px; border-radius:var(--radius-md); background:var(--color-primary); color:var(--white); display:flex; align-items:center; justify-content:center; font-weight:800; font-size:1.25rem; margin:0 auto var(--space-4); }
-  .step-link { background:none; border:none; color: var(--color-primary); font-size: var(--fs-sm); cursor:pointer; text-decoration: underline; padding:0; }
+  .step-link { background:none; border:none; color: var(--color-primary); font-size: var(--fs-xs); cursor:pointer; text-decoration: underline; padding:0; }
   .sent-state { text-align:center; }
   .sent-state .icon { font-size: 2.5rem; margin-bottom: var(--space-3); }
-  #unknown-email-box { display:none; text-align:center; margin-top:var(--space-4); padding:var(--space-3); background:var(--color-warning-bg); border-radius:var(--radius-sm); }
-  #unknown-email-box p { font-size:var(--fs-xs); color:var(--gray-700); margin-bottom:var(--space-2); }
 </style>
 </head>
 <body>
@@ -33,13 +32,10 @@
         <input type="email" id="email" name="email" required autocomplete="email" placeholder="tucorreo@ejemplo.com" />
         <div class="error-msg">Ingresa un correo válido.</div>
       </div>
-      <button type="submit" class="btn btn-primary" id="ingresar-btn" style="width:100%;">Ingresar</button>
-
-      <!-- Solo aparece si el correo NO está registrado/validado todavía -->
-      <div id="unknown-email-box">
-        <p>Este correo no está registrado todavía en el sistema. Si eres nuevo, pide el enlace de todas formas — Luis tendrá que darte acceso después.</p>
-        <button type="button" class="step-link" id="send-link-anyway-btn">Enviar enlace de acceso</button>
-      </div>
+      <button type="submit" class="btn btn-primary" id="send-link-btn" style="width:100%;">Ingresar</button>
+      <p style="text-align:center; font-size:var(--fs-xs); color:var(--gray-500); margin-top:var(--space-4);">
+        Te llegará un correo con un enlace — al hacer clic entras directo, sin escribir nada más.
+      </p>
     </form>
 
     <!-- ===================== CONFIRMACIÓN: ENLACE ENVIADO ===================== -->
@@ -56,7 +52,7 @@
   </div>
 
   <script type="module">
-    import { getSession, checkEmailRegistrado, requestMagicLink, getUrlAuthError } from '../assets/js/auth.js';
+    import { getSession, requestMagicLink, getUrlAuthError } from '../assets/js/auth.js';
     import { validateForm, showToast, setLoading } from '../assets/js/utils.js';
 
     // Si el enlace de acceso falló (vencido, o URL no autorizada en
@@ -78,8 +74,6 @@
     const formEmail = document.getElementById('form-email');
     const sentState = document.getElementById('sent-state');
     const sentEmailLabel = document.getElementById('sent-email-label');
-    const unknownBox = document.getElementById('unknown-email-box');
-    const emailInput = document.getElementById('email');
     let currentEmail = '';
 
     async function sendLink(email) {
@@ -90,53 +84,26 @@
       sentState.style.display = 'block';
     }
 
-    // Botón grande "Ingresar": valida primero si el correo ya está
-    // registrado. Si sí, envía el enlace directo (se siente como un login
-    // normal). Si no, no manda nada todavía — muestra la opción secundaria.
     formEmail.addEventListener('submit', async (evt) => {
       evt.preventDefault();
       if (!validateForm(formEmail)) return;
-      const email = emailInput.value.trim();
-      unknownBox.style.display = 'none';
-      const btn = document.getElementById('ingresar-btn');
-      setLoading(btn, true, 'Verificando…');
+      const btn = document.getElementById('send-link-btn');
+      setLoading(btn, true, 'Enviando…');
       try {
-        const registrado = await checkEmailRegistrado(email);
-        if (registrado) {
-          await sendLink(email);
-          showToast('Enlace enviado. Puede tardar un par de minutos.', 'success');
-        } else {
-          currentEmail = email;
-          unknownBox.style.display = 'block';
-        }
+        await sendLink(document.getElementById('email').value.trim());
+        showToast('Enlace enviado. Puede tardar un par de minutos.', 'success');
       } catch (err) {
         console.error(err);
-        showToast('No se pudo verificar el correo. Intenta de nuevo.', 'error');
+        showToast('No se pudo enviar el enlace. Verifica el correo e intenta de nuevo.', 'error');
       } finally {
         setLoading(btn, false);
-      }
-    });
-
-    // Opción secundaria para correos nuevos: envía el enlace igual, pero
-    // con un clic aparte (no automático) y avisando que falta el rol.
-    document.getElementById('send-link-anyway-btn').addEventListener('click', async (evt) => {
-      const btn = evt.currentTarget;
-      btn.disabled = true;
-      try {
-        await sendLink(currentEmail);
-        showToast('Enlace enviado. Pide a Luis que te asigne acceso luego de entrar.', 'success');
-      } catch (err) {
-        console.error(err);
-        showToast('No se pudo enviar el enlace. Intenta de nuevo.', 'error');
-        btn.disabled = false;
       }
     });
 
     document.getElementById('change-email-btn').addEventListener('click', () => {
       sentState.style.display = 'none';
       formEmail.style.display = 'block';
-      unknownBox.style.display = 'none';
-      emailInput.value = '';
+      document.getElementById('email').value = '';
     });
 
     document.getElementById('resend-link-btn').addEventListener('click', async (evt) => {

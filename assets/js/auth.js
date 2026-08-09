@@ -24,20 +24,6 @@ export async function signIn(email, password) {
 }
 
 /**
- * Verifica si un correo ya está registrado y validado en el sistema (tiene
- * fila en usuarios_roles) — llama a la función SQL `email_esta_registrado`
- * (ver assets/sql/email-lookup-function.sql). No expone ningún dato, solo
- * true/false. La usa pages/login.html para decidir si el botón "Ingresar"
- * envía el enlace directo o si primero muestra la opción secundaria para
- * correos nuevos.
- */
-export async function checkEmailRegistrado(email) {
-  const { data, error } = await supabase.rpc('email_esta_registrado', { p_email: email });
-  if (error) throw error;
-  return Boolean(data);
-}
-
-/**
  * Login sin contraseña: envía un correo con un enlace ("magic link"). Al
  * hacer clic, Supabase autentica al usuario y lo redirige de vuelta ya con
  * la sesión activa — no hay código que escribir a mano.
