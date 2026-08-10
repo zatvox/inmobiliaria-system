@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%231B3A5C'/%3E%3Ctext x='32' y='45' font-size='36' text-anchor='middle'%3E%F0%9F%8F%A2%3C/text%3E%3C/svg%3E">
+<title>Cálculo de Servicios · Gestión Inmobiliaria</title>
+<link rel="stylesheet" href="../assets/css/variables.css" />
+<link rel="stylesheet" href="../assets/css/styles.css" />
+<link rel="stylesheet" href="../assets/css/components.css" />
+<link rel="stylesheet" href="../assets/css/responsive.css" />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
+</head>
+<body data-page="servicios">
+  <div class="app-shell">
+    <div class="sidebar-backdrop"></div>
+    <aside class="sidebar">
+      <div class="sidebar-brand">
+        <div class="logo-mark">GI</div>
+        <span>Gestión Inmobiliaria</span>
+      </div>
+      <nav class="sidebar-nav" aria-label="Navegación principal">
+        <div class="nav-section-title">Operación</div>
+        <a class="nav-link" data-page="dashboard" href="../index.html"><span class="nav-icon">🏠</span> Dashboard</a>
+        <a class="nav-link" data-page="inmuebles" href="inmuebles.html"><span class="nav-icon">🏢</span> Inmuebles</a>
+        <a class="nav-link" data-page="personas" href="personas.html"><span class="nav-icon">👥</span> Personas</a>
+        <a class="nav-link" data-page="contratos" href="contratos.html"><span class="nav-icon">📄</span> Contratos</a>
+        <a class="nav-link" data-page="cobranzas" href="cobranzas.html"><span class="nav-icon">💰</span> Cobranzas y Pagos</a>
+        <a class="nav-link" data-page="servicios" href="servicios.html"><span class="nav-icon">⚡</span> Cálculo de Servicios</a>
+        <div class="nav-section-title">Comercial</div>
+        <a class="nav-link" aria-disabled="true" href="#"><span class="nav-icon">📈</span> Ventas <span class="badge-soon">Fase 4</span></a>
+        <a class="nav-link" aria-disabled="true" href="#"><span class="nav-icon">📁</span> Documentos <span class="badge-soon">Fase 4</span></a>
+        <a class="nav-link" aria-disabled="true" href="#"><span class="nav-icon">📊</span> Reportes <span class="badge-soon">Fase 4</span></a>
+        <div class="nav-section-title">Sistema</div>
+        <a class="nav-link" aria-disabled="true" href="#"><span class="nav-icon">⚙️</span> Configuración <span class="badge-soon">Fase 5</span></a>
+      </nav>
+      <div class="sidebar-footer">Fase 2/3 · v0.2</div>
+    </aside>
+
+    <div class="main-area">
+      <header class="topbar">
+        <div style="display:flex; align-items:center; gap:12px;">
+          <button class="sidebar-toggle" aria-label="Abrir menú">☰</button>
+          <span class="topbar-title">Cálculo de Servicios</span>
+        </div>
+        <div class="topbar-user">
+          <div class="user-chip">
+            <div class="user-avatar" id="user-avatar">?</div>
+            <div>
+              <div id="user-name" style="font-weight:600;">Cargando…</div>
+              <div id="user-role" style="font-size:12px; color:var(--gray-500);"></div>
+            </div>
+          </div>
+          <button class="btn btn-tertiary btn-sm" id="logout-btn">Salir</button>
+        </div>
+      </header>
+
+      <main class="content">
+        <div class="page-header">
+          <div>
+            <h1>Cálculo de Servicios</h1>
+            <p class="subtitle">Medidores, lecturas mensuales, recibos generales y el cálculo que genera las cuotas de luz/agua/otros.</p>
+          </div>
+        </div>
+
+        <div class="tabs">
+          <button class="tab-btn active" data-tab="medidores">Medidores</button>
+          <button class="tab-btn" data-tab="lecturas">Lecturas del mes</button>
+          <button class="tab-btn" data-tab="recibos">Recibos generales</button>
+          <button class="tab-btn" data-tab="calculo">Cálculo</button>
+        </div>
+
+        <!-- ================================ MEDIDORES ================================ -->
+        <div class="tab-panel" id="panel-medidores">
+          <div class="page-header" style="margin-bottom:12px;">
+            <select id="filtro-medidor-propiedad" class="select-propiedad" style="max-width:280px;"></select>
+            <button class="btn btn-primary" id="btn-nuevo-medidor" data-admin-only>+ Nuevo medidor</button>
+          </div>
+          <div class="table-wrap">
+            <table class="data-table">
+              <thead><tr><th>Propiedad</th><th>Sección</th><th>Servicio</th><th>Código</th><th>Estado</th><th></th></tr></thead>
+              <tbody id="medidores-tbody"><tr><td colspan="6"><div class="skeleton" style="height:20px;"></div></td></tr></tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- ================================= LECTURAS ================================= -->
+        <div class="tab-panel" id="panel-lecturas" style="display:none;">
+          <div class="page-header" style="margin-bottom:12px; flex-wrap:wrap; gap:10px;">
+            <div style="display:flex; gap:10px; flex-wrap:wrap;">
+              <select id="filtro-lectura-propiedad" class="select-propiedad" style="max-width:220px;"></select>
+              <select id="filtro-lectura-medidor" style="max-width:280px;"><option value="">Todos los medidores</option></select>
+              <input type="month" id="filtro-lectura-periodo" style="max-width:160px;" />
+            </div>
+            <button class="btn btn-primary" id="btn-nueva-lectura" data-admin-only>+ Registrar lectura</button>
+          </div>
+          <div class="table-wrap">
+            <table class="data-table">
+              <thead><tr><th>Medidor</th><th>Servicio</th><th>Periodo</th><th>Lect. anterior</th><th>Lect. actual</th><th>Consumo</th><th>Foto</th></tr></thead>
+              <tbody id="lecturas-tbody"><tr><td colspan="7"><div class="skeleton" style="height:20px;"></div></td></tr></tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- ============================== RECIBOS GENERALES ============================== -->
+        <div class="tab-panel" id="panel-recibos" style="display:none;">
+          <div class="page-header" style="margin-bottom:12px;">
+            <select id="filtro-recibo-propiedad" class="select-propiedad" style="max-width:280px;"></select>
+            <button class="btn btn-primary" id="btn-nuevo-recibo" data-admin-only>+ Registrar recibo</button>
+          </div>
+          <div class="table-wrap">
+            <table class="data-table">
+              <thead><tr><th>Propiedad</th><th>Servicio</th><th>Periodo</th><th>Monto total</th><th>Estado</th><th></th></tr></thead>
+              <tbody id="recibos-tbody"><tr><td colspan="6"><div class="skeleton" style="height:20px;"></div></td></tr></tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- =================================== CÁLCULO ==================================== -->
+        <div class="tab-panel" id="panel-calculo" style="display:none;">
+          <div class="card">
+            <div class="card-title">1. Elige propiedad, servicio y periodo</div>
+            <div class="form-grid">
+              <div class="form-field">
+                <label for="ca-propiedad">Propiedad *</label>
+                <select id="ca-propiedad" class="select-propiedad"></select>
+              </div>
+              <div class="form-field">
+                <label for="ca-tipo-servicio">Servicio *</label>
+                <select id="ca-tipo-servicio" class="select-tipo-servicio"></select>
+              </div>
+              <div class="form-field">
+                <label for="ca-periodo">Periodo *</label>
+                <input type="month" id="ca-periodo" />
+              </div>
+            </div>
+            <button class="btn btn-secondary" id="btn-cargar-calculo">Cargar secciones</button>
+          </div>
+
+          <div id="calculo-resultado" style="margin-top:20px;"></div>
+          <input type="hidden" id="calculo-recibo-id" />
+          <button class="btn btn-primary" id="btn-confirmar-calculo" style="display:none; margin-top:16px;" data-admin-only>Confirmar y generar cobranzas</button>
+        </div>
+      </main>
+    </div>
+  </div>
+
+  <!-- ============================ MODAL: MEDIDOR ============================ -->
+  <div class="modal-overlay" id="modal-medidor" aria-hidden="true">
+    <div class="modal">
+      <div class="modal-header">
+        <h3 id="modal-medidor-title">Nuevo medidor</h3>
+        <button class="modal-close" data-modal-close aria-label="Cerrar">×</button>
+      </div>
+      <form id="form-medidor">
+        <div class="modal-body">
+          <div class="form-grid">
+            <div class="form-field full">
+              <label class="checkbox-row" style="flex-direction:row; align-items:center; gap:8px;">
+                <input type="checkbox" id="me-es-general" style="width:auto;" /> Es medidor general de la propiedad (no de una sección específica)
+              </label>
+            </div>
+            <div class="form-field" id="me-propiedad-field">
+              <label for="me-propiedad">Propiedad *</label>
+              <select id="me-propiedad" class="select-propiedad" required></select>
+            </div>
+            <div class="form-field" id="me-seccion-field">
+              <label for="me-seccion">Sección *</label>
+              <select id="me-seccion"><option value="">Selecciona…</option></select>
+            </div>
+            <div class="form-field">
+              <label for="me-tipo-servicio">Servicio *</label>
+              <select id="me-tipo-servicio" class="select-tipo-servicio" required></select>
+            </div>
+            <div class="form-field">
+              <label for="me-codigo">Código del medidor</label>
+              <input type="text" id="me-codigo" />
+            </div>
+            <div class="form-field">
+              <label for="me-fecha-instalacion">Fecha de instalación</label>
+              <input type="date" id="me-fecha-instalacion" />
+            </div>
+            <div class="form-field full">
+              <label for="me-notas">Notas</label>
+              <textarea id="me-notas"></textarea>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-tertiary" data-modal-close>Cancelar</button>
+          <button type="submit" class="btn btn-primary" id="btn-guardar-medidor">Guardar medidor</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ============================ MODAL: LECTURA ============================ -->
+  <div class="modal-overlay" id="modal-lectura" aria-hidden="true">
+    <div class="modal">
+      <div class="modal-header">
+        <h3>Registrar lectura</h3>
+        <button class="modal-close" data-modal-close aria-label="Cerrar">×</button>
+      </div>
+      <form id="form-lectura">
+        <div class="modal-body">
+          <div class="form-grid">
+            <div class="form-field full">
+              <label for="le-medidor">Medidor *</label>
+              <select id="le-medidor" required><option value="">Selecciona…</option></select>
+            </div>
+            <div class="form-field">
+              <label for="le-periodo">Periodo *</label>
+              <input type="month" id="le-periodo" required />
+            </div>
+            <div class="form-field">
+              <label for="le-fecha">Fecha de lectura *</label>
+              <input type="date" id="le-fecha" required />
+            </div>
+            <div class="form-field">
+              <label for="le-lectura-anterior">Lectura anterior</label>
+              <input type="number" id="le-lectura-anterior" step="0.001" readonly style="background:var(--gray-100);" />
+              <div class="hint">Se completa sola con la última lectura registrada.</div>
+            </div>
+            <div class="form-field">
+              <label for="le-lectura-actual">Lectura actual *</label>
+              <input type="number" id="le-lectura-actual" step="0.001" required />
+            </div>
+            <div class="form-field full">
+              <label for="le-foto-file">Foto del medidor</label>
+              <input type="file" id="le-foto-file" accept="image/*" />
+            </div>
+            <div class="form-field full">
+              <label for="le-notas">Notas</label>
+              <textarea id="le-notas"></textarea>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-tertiary" data-modal-close>Cancelar</button>
+          <button type="submit" class="btn btn-primary" id="btn-guardar-lectura">Guardar lectura</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ============================ MODAL: RECIBO GENERAL ============================ -->
+  <div class="modal-overlay" id="modal-recibo" aria-hidden="true">
+    <div class="modal">
+      <div class="modal-header">
+        <h3>Registrar recibo general</h3>
+        <button class="modal-close" data-modal-close aria-label="Cerrar">×</button>
+      </div>
+      <form id="form-recibo">
+        <div class="modal-body">
+          <div class="form-grid">
+            <div class="form-field">
+              <label for="re-propiedad">Propiedad *</label>
+              <select id="re-propiedad" class="select-propiedad" required></select>
+            </div>
+            <div class="form-field">
+              <label for="re-tipo-servicio">Servicio *</label>
+              <select id="re-tipo-servicio" class="select-tipo-servicio" required></select>
+            </div>
+            <div class="form-field">
+              <label for="re-periodo">Periodo *</label>
+              <input type="month" id="re-periodo" required />
+            </div>
+            <div class="form-field">
+              <label for="re-monto">Monto total del recibo *</label>
+              <input type="number" id="re-monto" step="0.01" min="0" required />
+            </div>
+            <div class="form-field">
+              <label for="re-consumo">Consumo total (opcional)</label>
+              <input type="number" id="re-consumo" step="0.001" min="0" />
+              <div class="hint">Si lo llenas, se calcula el precio unitario automáticamente.</div>
+            </div>
+            <div class="form-field">
+              <label for="re-fecha-venc">Fecha de vencimiento del recibo</label>
+              <input type="date" id="re-fecha-venc" />
+            </div>
+            <div class="form-field full">
+              <label for="re-foto-file">Foto del recibo</label>
+              <input type="file" id="re-foto-file" accept="image/*,.pdf" />
+            </div>
+            <div class="form-field full">
+              <label for="re-notas">Notas</label>
+              <textarea id="re-notas"></textarea>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-tertiary" data-modal-close>Cancelar</button>
+          <button type="submit" class="btn btn-primary" id="btn-guardar-recibo">Guardar recibo</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script type="module" src="../assets/js/servicios.js"></script>
+</body>
+</html>

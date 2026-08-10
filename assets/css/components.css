@@ -88,6 +88,7 @@
   color: var(--color-primary-light);
   font-size: 2rem;
 }
+.property-card .thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .property-card .body { padding: var(--space-4); }
 .property-card .body h4 { margin-bottom: 2px; }
 .property-card .addr { color: var(--gray-500); font-size: var(--fs-sm); margin-bottom: var(--space-3); }

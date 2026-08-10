@@ -9,7 +9,7 @@ let profile = null;
 
 const ROL_LABELS = {
   propietario: 'Propietario', inquilino: 'Inquilino', comprador: 'Comprador',
-  agente: 'Agente', lead: 'Lead', proveedor: 'Proveedor',
+  agente: 'Agente', lead: 'Lead', proveedor: 'Proveedor', aval: 'Aval',
 };
 
 async function main() {

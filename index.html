@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<link rel="icon" href="data:,">
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%231B3A5C'/%3E%3Ctext x='32' y='45' font-size='36' text-anchor='middle'%3E%F0%9F%8F%A2%3C/text%3E%3C/svg%3E">
 <title>Dashboard · Gestión Inmobiliaria</title>
 <meta name="description" content="Panel de administración de propiedades, contratos, cobranzas y servicios." />
 <link rel="stylesheet" href="assets/css/variables.css" />
@@ -25,10 +25,9 @@
         <a class="nav-link" data-page="dashboard" href="index.html"><span class="nav-icon">🏠</span> Dashboard</a>
         <a class="nav-link" data-page="inmuebles" href="pages/inmuebles.html"><span class="nav-icon">🏢</span> Inmuebles</a>
         <a class="nav-link" data-page="personas" href="pages/personas.html"><span class="nav-icon">👥</span> Personas</a>
-        <a class="nav-link" aria-disabled="true" href="#"><span class="nav-icon">📄</span> Contratos <span class="badge-soon">Fase 2</span></a>
-        <a class="nav-link" aria-disabled="true" href="#"><span class="nav-icon">💰</span> Cobranzas <span class="badge-soon">Fase 3</span></a>
-        <a class="nav-link" aria-disabled="true" href="#"><span class="nav-icon">💳</span> Pagos <span class="badge-soon">Fase 3</span></a>
-        <a class="nav-link" aria-disabled="true" href="#"><span class="nav-icon">⚡</span> Cálculo de Servicios <span class="badge-soon">Fase 3</span></a>
+        <a class="nav-link" data-page="contratos" href="pages/contratos.html"><span class="nav-icon">📄</span> Contratos</a>
+        <a class="nav-link" data-page="cobranzas" href="pages/cobranzas.html"><span class="nav-icon">💰</span> Cobranzas y Pagos</a>
+        <a class="nav-link" data-page="servicios" href="pages/servicios.html"><span class="nav-icon">⚡</span> Cálculo de Servicios</a>
         <div class="nav-section-title">Comercial</div>
         <a class="nav-link" aria-disabled="true" href="#"><span class="nav-icon">📈</span> Ventas <span class="badge-soon">Fase 4</span></a>
         <a class="nav-link" aria-disabled="true" href="#"><span class="nav-icon">📁</span> Documentos <span class="badge-soon">Fase 4</span></a>
@@ -36,7 +35,7 @@
         <div class="nav-section-title">Sistema</div>
         <a class="nav-link" aria-disabled="true" href="#"><span class="nav-icon">⚙️</span> Configuración <span class="badge-soon">Fase 5</span></a>
       </nav>
-      <div class="sidebar-footer">Fase 1 · v0.1</div>
+      <div class="sidebar-footer">Fase 2/3 · v0.2</div>
     </aside>
 
     <div class="main-area">
@@ -70,6 +69,7 @@
           <div class="kpi-card"><div class="kpi-label">Secciones</div><div class="kpi-value skeleton" style="height:2.25rem;">&nbsp;</div></div>
           <div class="kpi-card"><div class="kpi-label">Personas registradas</div><div class="kpi-value skeleton" style="height:2.25rem;">&nbsp;</div></div>
           <div class="kpi-card"><div class="kpi-label">Contratos vigentes</div><div class="kpi-value skeleton" style="height:2.25rem;">&nbsp;</div></div>
+          <div class="kpi-card"><div class="kpi-label">Cobranzas pendientes</div><div class="kpi-value skeleton" style="height:2.25rem;">&nbsp;</div></div>
         </div>
 
         <div class="card">
@@ -87,8 +87,8 @@
               <thead><tr><th>Fase</th><th>Módulos</th><th>Estado</th></tr></thead>
               <tbody>
                 <tr><td>1</td><td>Esquema Supabase completo + Inmuebles + Secciones + Personas</td><td><span class="badge badge-alquilado">Entregado</span></td></tr>
-                <tr><td>2</td><td>Contratos de alquiler y venta + generación automática de cuotas</td><td><span class="badge badge-neutral">Pendiente</span></td></tr>
-                <tr><td>3</td><td>Cobranzas + Pagos (tab Servicios) + módulo Cálculo de Servicios</td><td><span class="badge badge-neutral">Pendiente</span></td></tr>
+                <tr><td>2</td><td>Contratos de alquiler y venta + generación automática de cuotas</td><td><span class="badge badge-alquilado">Entregado</span></td></tr>
+                <tr><td>3</td><td>Cobranzas + Pagos + módulo Cálculo de Servicios</td><td><span class="badge badge-alquilado">Entregado</span></td></tr>
                 <tr><td>4</td><td>Ventas (pipeline), Documentos, Reportes</td><td><span class="badge badge-neutral">Pendiente</span></td></tr>
                 <tr><td>5</td><td>Configuración completa, plantillas de contrato PDF, Usuarios y Roles</td><td><span class="badge badge-neutral">Pendiente</span></td></tr>
               </tbody>

@@ -2,7 +2,7 @@
 
 Sigue estos pasos en orden. Tiempo estimado: 20-30 minutos la primera vez.
 
-> ⚡ **Login solo con correo (sin contraseña) por ahora.** `AUTH_ENABLED = true` en `assets/js/config.js`, pero en vez de pedir contraseña, `pages/login.html` envía un **enlace de acceso** ("magic link") al correo — se hace clic y entra directo, sin escribir ningún código. La seguridad real sigue siendo la de `rls-policies.sql` — **no hace falta correr `assets/sql/dev-open-access.sql`**, ese archivo quedó solo como referencia de un modo totalmente abierto que ya no se está usando.
+> ⚡ **Login desactivado por ahora (modo desarrollo).** `AUTH_ENABLED = false` en `assets/js/config.js` — el sistema entra directo al dashboard, sin pantalla de login (uso interno mientras se termina de construir). Si tu sesión de Supabase Auth ya está activa en el navegador (por ejemplo porque ya iniciaste sesión antes), RLS sigue funcionando normal con tu rol real. Si abres el sistema desde un navegador **sin sesión activa** (otro dispositivo, modo incógnito, o borraste el localStorage), no vas a ver datos hasta que corras `assets/sql/dev-open-access.sql` (abre RLS al rol `anon` — ver la advertencia de seguridad dentro de ese archivo) o vuelvas a activar el login real (`AUTH_ENABLED = true`, el flujo de "magic link" ya está listo en `auth.js`/`pages/login.html`).
 
 ## 1. Crear el proyecto en Supabase
 
@@ -17,9 +17,11 @@ En el panel de Supabase, ve a **SQL Editor** → **New query**, y ejecuta los ar
 1. `assets/sql/schema.sql` — crea todas las tablas, triggers y funciones.
 2. `assets/sql/rls-policies.sql` — activa Row Level Security y las políticas por rol.
 3. `assets/sql/seed.sql` — carga los catálogos, tipos de servicio y las 3 propiedades reales.
-4. `assets/sql/email-lookup-function.sql` — crea la función que usa el botón "Ingresar" del login para saber si un correo ya está registrado antes de mandar el enlace.
+4. `assets/sql/migrations-fase2-fase3.sql` — funciones y triggers de Fase 2/3: generación de cuotas de venta, recálculo de estado de cuotas al pagar, mora sobre vencidas, y el cálculo de servicios (RPC `calcular_periodo_servicio`). **Obligatorio** para que los módulos Contratos, Cobranzas y Cálculo de Servicios funcionen.
 
-No corras `assets/sql/dev-open-access.sql` — es de un modo totalmente abierto (sin login) que ya no se está usando; ábrelo solo si en algún momento quieres volver a ese modo.
+`assets/sql/email-lookup-function.sql` quedó del flujo de login por correo (actualmente desactivado) — no hace falta correrlo mientras `AUTH_ENABLED = false`.
+
+Solo corre `assets/sql/dev-open-access.sql` si necesitas ver datos sin una sesión real de Supabase Auth activa (ver la nota de arriba) — abre RLS al rol `anon`, revisa la advertencia de seguridad dentro del archivo antes de correrlo.
 
 Si algún paso falla, revisa el mensaje de error antes de continuar — no saltes al siguiente archivo con un paso fallido.
 

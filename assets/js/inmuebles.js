@@ -91,8 +91,9 @@ async function renderList(search = '') {
 function renderPropiedadCard(p) {
   const secciones = p.secciones ?? [];
   const ocupadas = secciones.filter((s) => s.estado === 'alquilado' || s.estado === 'vendido').length;
+  const thumb = el('div', { class: 'thumb' }, p.tipo === 'Terreno / Lotes' ? '🗺️' : '🏢');
   const card = el('div', { class: 'property-card', onclick: () => { window.history.pushState({}, '', `?id=${p.id}`); showDetail(p.id); } }, [
-    el('div', { class: 'thumb' }, p.tipo === 'Terreno / Lotes' ? '🗺️' : '🏢'),
+    thumb,
     el('div', { class: 'body' }, [
       el('h4', {}, p.nombre_referencial),
       el('div', { class: 'addr' }, [p.direccion, p.distrito].filter(Boolean).join(' · ')),
@@ -102,6 +103,20 @@ function renderPropiedadCard(p) {
       ]),
     ]),
   ]);
+
+  // Si el inmueble ya tiene fotos, muestra la de fachada (la primera según
+  // orden) en miniatura en vez del ícono genérico. La URL firmada se resuelve
+  // de forma asíncrona sin bloquear el render de la tarjeta.
+  const fotos = (p.propiedades_fotos ?? []).slice().sort((a, b) => (a.orden ?? 0) - (b.orden ?? 0));
+  if (fotos.length) {
+    getSignedUrl(fotos[0].url_storage)
+      .then((url) => {
+        if (!url) return;
+        thumb.innerHTML = '';
+        thumb.append(el('img', { src: url, alt: `Fachada de ${p.nombre_referencial}`, loading: 'lazy' }));
+      })
+      .catch((err) => console.error('No se pudo cargar la foto de fachada:', err));
+  }
   return card;
 }
 

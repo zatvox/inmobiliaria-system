@@ -13,18 +13,22 @@ export const SUPABASE_URL = 'https://lepzvqrtkoichsxyjtse.supabase.co';
 export const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxlcHp2cXJ0a29pY2hzeHlqdHNlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI1MjcwMTEsImV4cCI6MjA5ODEwMzAxMX0.rHBoVArG6smT2x8YW5C3oG19w_t7F6gEXKsOkILaSik';
 
 /**
- * AUTH_ENABLED = true → hay login real (Supabase Auth), y por lo tanto RLS
- * funciona con auth.uid() normalmente — NO hace falta correr
- * assets/sql/dev-open-access.sql (ese archivo era solo para el modo
- * desarrollo sin login, ya no se usa mientras esto esté en `true`).
+ * AUTH_ENABLED = false → SIN LOGIN por ahora (decisión de Luis: sistema de
+ * uso interno/personal, con su hermano, mientras se termina de construir).
+ * Todas las páginas entran directo como administrador, sin pantalla de
+ * login. pages/login.html redirige solo a index.html si alguien la abre.
  *
- * El login es "solo con correo": no se pide contraseña ni código. El
- * usuario escribe su email en pages/login.html, recibe un correo con un
- * enlace ("magic link"), y al hacer clic entra directo al sistema — ver
- * requestMagicLink() en auth.js. Cuando en el futuro se quiera agregar
- * contraseña, se puede volver a usar signIn().
+ * Para que esto funcione con datos reales hace falta correr UNA VEZ
+ * assets/sql/dev-open-access.sql en Supabase — abre las políticas RLS al
+ * rol "anon" (sin eso, como no hay sesión real, ninguna tabla protegida
+ * devuelve datos). Ver la advertencia de seguridad dentro de ese archivo:
+ * cualquiera con la URL puede leer y escribir todo mientras esto esté así.
+ *
+ * Cuando se quiera volver a activar un login real (correo+contraseña,
+ * `signIn()` ya está listo en auth.js), poner esto en `true` y correr la
+ * reversión que trae dev-open-access.sql al final del archivo.
  */
-export const AUTH_ENABLED = true;
+export const AUTH_ENABLED = false;
 
 /**
  * SITE_URL ya NO hace falta configurarlo a mano: pages/login.html calcula

@@ -4,21 +4,21 @@ Sistema propio (uso interno, una sola empresa) para administrar una cartera de i
 
 **Stack:** HTML + CSS modular + JavaScript vanilla (ES Modules) + [Supabase](https://supabase.com) (PostgreSQL + Auth + Storage + RLS) · Hosting: GitHub Pages.
 
-> ⚡ **Login solo con correo, sin contraseña por ahora.** Escribes tu email, te llega un enlace de acceso ("magic link"), haces clic y entras directo — la seguridad real la sigue dando RLS (`rls-policies.sql`), no la ausencia de contraseña. Ver `SETUP.md` pasos 6-7 (SITE_URL + Redirect URLs) y paso 4 para asignarte el rol de administrador la primera vez.
+> ⚡ **Login desactivado por ahora (modo desarrollo).** `AUTH_ENABLED = false` en `assets/js/config.js` — el sistema entra directo como administrador, sin pantalla de login (uso interno de Luis y su hermano mientras se termina de construir). El login por correo con "magic link" ya está codificado en `auth.js`/`pages/login.html` y se puede reactivar más adelante. Ver la nota dentro de `config.js` para los detalles.
 
-## Estado actual: Fase 1 de 5
+## Estado actual: Fase 3 de 5
 
 Este sistema se está construyendo **por fases**, revisando cada módulo con Luis antes de avanzar (ver `docs/ADDENDUM-SECCIONES-SERVICIOS.md`, sección 6).
 
 | Fase | Contenido | Estado |
 |---|---|---|
-| **1** | Esquema completo de Supabase (todas las tablas del sistema) + RLS + datos semilla reales + módulos **Inmuebles y Secciones** + **Personas** | ✅ Entregado en esta versión |
-| 2 | Contratos (alquiler y venta) + generación automática de cuotas | Pendiente |
-| 3 | Cobranzas + Pagos (con tab "Servicios") + módulo **Cálculo de Servicios** (medidores, lecturas, recibos, cálculo de consumo) | Pendiente |
+| **1** | Esquema completo de Supabase (todas las tablas del sistema) + RLS + datos semilla reales + módulos **Inmuebles y Secciones** + **Personas** | ✅ Entregado |
+| **2** | Contratos (alquiler y venta) + generación automática de cuotas | ✅ Entregado |
+| **3** | Cobranzas + Pagos + módulo **Cálculo de Servicios** (medidores, lecturas, recibos, cálculo de consumo) | ✅ Entregado |
 | 4 | Ventas (pipeline), Documentos, Reportes | Pendiente |
 | 5 | Configuración completa (plantillas de contrato + generación de PDF), Usuarios y Roles, Notificaciones | Pendiente |
 
-Aunque el esquema de base de datos (`assets/sql/schema.sql`) ya incluye **todas** las tablas necesarias para las 5 fases (para que las relaciones queden consistentes desde el inicio), la interfaz web solo tiene construidos los módulos de la Fase 1. El menú lateral muestra el resto de módulos marcados como "Próximamente" con la fase en la que llegan.
+El esquema de base de datos (`assets/sql/schema.sql` + `assets/sql/migrations-fase2-fase3.sql`) ya incluye **todas** las tablas y funciones necesarias para las 5 fases. La interfaz web tiene construidos los módulos de las Fases 1 a 3. El menú lateral muestra el resto de módulos (Ventas, Documentos, Reportes, Configuración) marcados como "Próximamente" con la fase en la que llegan.
 
 ## Requisitos
 
@@ -32,9 +32,12 @@ Aunque el esquema de base de datos (`assets/sql/schema.sql`) ya incluye **todas*
 inmobiliaria-system/
 ├── index.html                 # Dashboard principal
 ├── pages/
-│   ├── login.html              # Autenticación (Supabase Auth)
+│   ├── login.html              # Autenticación (Supabase Auth) — desactivada, ver AUTH_ENABLED
 │   ├── inmuebles.html          # Módulo Inmuebles + Secciones
-│   └── personas.html           # Módulo Personas
+│   ├── personas.html           # Módulo Personas
+│   ├── contratos.html          # Módulo Contratos (alquiler y venta) — Fase 2
+│   ├── cobranzas.html          # Módulo Cobranzas + Pagos — Fase 3
+│   └── servicios.html          # Módulo Cálculo de Servicios — Fase 3
 ├── assets/
 │   ├── css/
 │   │   ├── variables.css       # Paleta de colores, tipografía, espaciado
@@ -50,11 +53,16 @@ inmobiliaria-system/
 │   │   ├── utils.js             # Helpers (toasts, modales, formatos, validación)
 │   │   ├── dashboard.js         # Lógica de index.html
 │   │   ├── inmuebles.js         # Lógica de pages/inmuebles.html
-│   │   └── personas.js          # Lógica de pages/personas.html
+│   │   ├── personas.js          # Lógica de pages/personas.html
+│   │   ├── contratos.js         # Lógica de pages/contratos.html
+│   │   ├── cobranzas.js         # Lógica de pages/cobranzas.html
+│   │   └── servicios.js         # Lógica de pages/servicios.html
 │   └── sql/
-│       ├── schema.sql            # Estructura completa de tablas (todas las fases)
-│       ├── rls-policies.sql      # Row Level Security por tabla
-│       └── seed.sql              # Datos reales de las 3 propiedades de Luis
+│       ├── schema.sql                    # Estructura completa de tablas (todas las fases)
+│       ├── rls-policies.sql              # Row Level Security por tabla
+│       ├── seed.sql                      # Datos reales de las 3 propiedades de Luis
+│       ├── migrations-fase2-fase3.sql    # Funciones/triggers de cuotas, pagos, mora y cálculo de servicios
+│       └── dev-open-access.sql           # Solo si usas AUTH_ENABLED=false sin sesión real (ver advertencia dentro)
 └── docs/
     └── ADDENDUM-SECCIONES-SERVICIOS.md   # Decisiones de diseño de Secciones,
                                             # Agentes/Comisiones y Cálculo de Servicios
@@ -64,10 +72,13 @@ inmobiliaria-system/
 
 ## Guía de uso rápido (una vez configurado — ver `SETUP.md`)
 
-1. Entra a `pages/login.html` con el usuario que Luis te creó en Supabase Auth.
+1. Abre `index.html` (con `AUTH_ENABLED=false` entras directo, sin login).
 2. **Inmuebles**: registra un predio/edificio (dirección, tipo, propietario) y dentro de él crea sus **secciones** (pisos, departamentos, dúplex, lotes). Cada sección tiene su propio estado, precio y si tiene o no medidor propio de luz/agua.
 3. **Personas**: registra inquilinos, propietarios, compradores o agentes — una misma persona puede tener varios roles.
-4. Las fases siguientes (Contratos, Cobranzas, Pagos, Cálculo de Servicios) se habilitan según se vayan entregando.
+4. **Contratos**: crea un contrato de alquiler o venta sobre una sección disponible — las cuotas de cobranza se generan automáticamente en el servidor.
+5. **Cobranzas y Pagos**: registra pagos contra cada cuota (con voucher y foto), verifica pagos, y usa "Actualizar vencidas" para aplicar la mora configurada.
+6. **Cálculo de Servicios**: registra medidores, lecturas mensuales y el recibo general del mes, y usa la pestaña "Cálculo" para generar automáticamente las cuotas de luz/agua por sección.
+7. Las fases siguientes (Ventas, Documentos, Reportes, Configuración) se habilitan según se vayan entregando.
 
 ## Concepto clave: Propiedades vs. Secciones
 

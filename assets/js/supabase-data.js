@@ -22,7 +22,7 @@ export async function getCatalogo(tipo) {
 export async function listPropiedades({ search = '' } = {}) {
   let query = supabase
     .from('propiedades')
-    .select('id, nombre_referencial, tipo, direccion, distrito, n_pisos, notas, propietario_id, personas:propietario_id(nombre), secciones(id, estado)')
+    .select('id, nombre_referencial, tipo, direccion, distrito, n_pisos, notas, propietario_id, personas:propietario_id(nombre), secciones(id, estado), propiedades_fotos(url_storage, orden)')
     .order('created_at', { ascending: false });
 
   if (search) {
@@ -183,18 +183,389 @@ export async function removeArchivo(path) {
   if (error) throw error;
 }
 
+/* =========================== SECCIONES (helpers) ============================ */
+export async function listSeccionesDisponibles({ paraVenta = false } = {}) {
+  const estados = paraVenta ? ['disponible', 'en_venta'] : ['disponible', 'en_alquiler'];
+  const { data, error } = await supabase
+    .from('secciones')
+    .select('id, nombre, tipo_seccion, estado, precio_venta, precio_alquiler_referencial, propiedad_id, propiedades(nombre_referencial)')
+    .in('estado', estados)
+    .order('nombre', { ascending: true });
+  if (error) throw error;
+  return data;
+}
+
+export async function listSeccionesPorPropiedad(propiedadId) {
+  const { data, error } = await supabase
+    .from('secciones')
+    .select('id, nombre, tipo_seccion, estado, tiene_medidor_propio_luz, tiene_medidor_propio_agua')
+    .eq('propiedad_id', propiedadId)
+    .order('orden', { ascending: true });
+  if (error) throw error;
+  return data;
+}
+
+/* ============================== CONTRATOS =================================== */
+export async function listContratosAlquiler({ search = '' } = {}) {
+  let query = supabase
+    .from('contratos_alquiler')
+    .select(`
+      id, monto_renta, moneda, dia_vencimiento, fecha_inicio, fecha_fin, estado, deposito_garantia, renovacion_automatica, notas,
+      seccion:seccion_id ( id, nombre, propiedad_id, propiedades(nombre_referencial, distrito) ),
+      inquilino:inquilino_id ( id, nombre, telefono ),
+      agente:agente_id ( id, nombre ),
+      aval:aval_id ( id, nombre, telefono )
+    `)
+    .order('fecha_inicio', { ascending: false });
+  const { data, error } = await query;
+  if (error) throw error;
+  if (search) {
+    const s = search.toLowerCase();
+    return data.filter((c) =>
+      c.inquilino?.nombre?.toLowerCase().includes(s) ||
+      c.seccion?.nombre?.toLowerCase().includes(s) ||
+      c.seccion?.propiedades?.nombre_referencial?.toLowerCase().includes(s));
+  }
+  return data;
+}
+
+export async function getContratoAlquiler(id) {
+  const { data, error } = await supabase
+    .from('contratos_alquiler')
+    .select(`*, seccion:seccion_id(id, nombre, propiedad_id, propiedades(nombre_referencial, distrito)), inquilino:inquilino_id(id, nombre), agente:agente_id(id, nombre), aval:aval_id(id, nombre)`)
+    .eq('id', id).single();
+  if (error) throw error;
+  return data;
+}
+
+export async function createContratoAlquiler(payload) {
+  const { data, error } = await supabase.from('contratos_alquiler').insert(payload).select().single();
+  if (error) throw error;
+  return data;
+}
+
+export async function updateContratoAlquiler(id, payload) {
+  const { data, error } = await supabase.from('contratos_alquiler').update(payload).eq('id', id).select().single();
+  if (error) throw error;
+  return data;
+}
+
+export async function listContratosVenta({ search = '' } = {}) {
+  const { data, error } = await supabase
+    .from('contratos_venta')
+    .select(`
+      id, precio_pactado, forma_pago, fecha_firma, estado, n_cuotas, notas,
+      seccion:seccion_id ( id, nombre, propiedad_id, propiedades(nombre_referencial, distrito) ),
+      comprador:comprador_id ( id, nombre, telefono ),
+      agente:agente_id ( id, nombre ),
+      aval:aval_id ( id, nombre, telefono )
+    `)
+    .order('fecha_firma', { ascending: false });
+  if (error) throw error;
+  if (search) {
+    const s = search.toLowerCase();
+    return data.filter((c) =>
+      c.comprador?.nombre?.toLowerCase().includes(s) ||
+      c.seccion?.nombre?.toLowerCase().includes(s) ||
+      c.seccion?.propiedades?.nombre_referencial?.toLowerCase().includes(s));
+  }
+  return data;
+}
+
+export async function getContratoVenta(id) {
+  const { data, error } = await supabase
+    .from('contratos_venta')
+    .select(`*, seccion:seccion_id(id, nombre, propiedad_id, propiedades(nombre_referencial, distrito)), comprador:comprador_id(id, nombre), agente:agente_id(id, nombre), aval:aval_id(id, nombre)`)
+    .eq('id', id).single();
+  if (error) throw error;
+  return data;
+}
+
+export async function createContratoVenta(payload) {
+  const { data, error } = await supabase.from('contratos_venta').insert(payload).select().single();
+  if (error) throw error;
+  return data;
+}
+
+export async function updateContratoVenta(id, payload) {
+  const { data, error } = await supabase.from('contratos_venta').update(payload).eq('id', id).select().single();
+  if (error) throw error;
+  return data;
+}
+
+/* ========================== COMISIONES DE AGENTES ============================ */
+export async function createComisionAgente(payload) {
+  const { data, error } = await supabase.from('comisiones_agentes').insert(payload).select().single();
+  if (error) throw error;
+  return data;
+}
+
+export async function listComisionesAgentes() {
+  const { data, error } = await supabase
+    .from('comisiones_agentes')
+    .select('id, agente_id, contrato_tipo, contrato_id, monto, porcentaje, estado, fecha_pago, notas, created_at, agente:agente_id(nombre)')
+    .order('created_at', { ascending: false });
+  if (error) throw error;
+  return data;
+}
+
+export async function marcarComisionPagada(id, comprobanteUrl = null) {
+  const payload = { estado: 'pagada', fecha_pago: new Date().toISOString().slice(0, 10) };
+  if (comprobanteUrl) payload.comprobante_url = comprobanteUrl;
+  const { data, error } = await supabase.from('comisiones_agentes').update(payload).eq('id', id).select().single();
+  if (error) throw error;
+  return data;
+}
+
+/* ============================ CUOTAS Y COBRANZAS ============================= */
+export async function listCuotas({ origen = '', estado = '', search = '' } = {}) {
+  let query = supabase
+    .from('cuotas')
+    .select(`
+      id, origen, contrato_id, calculo_servicio_detalle_id, numero_cuota, concepto, monto, fecha_vencimiento, estado, mora_aplicada, created_at,
+      pagos ( id, monto, estado )
+    `)
+    .order('fecha_vencimiento', { ascending: true });
+  if (origen) query = query.eq('origen', origen);
+  if (estado) query = query.eq('estado', estado);
+  const { data, error } = await query;
+  if (error) throw error;
+
+  // Resolver el "deudor" y referencia segun el origen, en llamadas separadas
+  // agrupadas (evita N+1 con joins logicos que Supabase no puede hacer directo
+  // porque contrato_id apunta a dos tablas distintas segun el origen).
+  const idsAlquiler = data.filter((c) => c.origen === 'alquiler' && c.contrato_id).map((c) => c.contrato_id);
+  const idsVenta = data.filter((c) => c.origen === 'venta' && c.contrato_id).map((c) => c.contrato_id);
+  const idsDetalle = data.filter((c) => c.origen === 'servicio' && c.calculo_servicio_detalle_id).map((c) => c.calculo_servicio_detalle_id);
+
+  const [alquileres, ventas, detalles] = await Promise.all([
+    idsAlquiler.length
+      ? supabase.from('contratos_alquiler').select('id, inquilino:inquilino_id(nombre), seccion:seccion_id(nombre, propiedades(nombre_referencial))').in('id', idsAlquiler)
+      : Promise.resolve({ data: [] }),
+    idsVenta.length
+      ? supabase.from('contratos_venta').select('id, comprador:comprador_id(nombre), seccion:seccion_id(nombre, propiedades(nombre_referencial))').in('id', idsVenta)
+      : Promise.resolve({ data: [] }),
+    idsDetalle.length
+      ? supabase.from('calculo_servicios_detalle').select('id, seccion:seccion_id(nombre, propiedades(nombre_referencial)), calculo_periodo:calculo_periodo_id(periodo, tipo_servicio:tipo_servicio_id(nombre)), contrato_alquiler:contrato_alquiler_id(inquilino:inquilino_id(nombre))').in('id', idsDetalle)
+      : Promise.resolve({ data: [] }),
+  ]);
+
+  const mapAlquiler = new Map((alquileres.data ?? []).map((a) => [a.id, a]));
+  const mapVenta = new Map((ventas.data ?? []).map((v) => [v.id, v]));
+  const mapDetalle = new Map((detalles.data ?? []).map((d) => [d.id, d]));
+
+  const enriched = data.map((c) => {
+    let deudor = '—', referencia = '—';
+    if (c.origen === 'alquiler') {
+      const a = mapAlquiler.get(c.contrato_id);
+      deudor = a?.inquilino?.nombre ?? '—';
+      referencia = a ? `${a.seccion?.propiedades?.nombre_referencial ?? ''} · ${a.seccion?.nombre ?? ''}` : '—';
+    } else if (c.origen === 'venta') {
+      const v = mapVenta.get(c.contrato_id);
+      deudor = v?.comprador?.nombre ?? '—';
+      referencia = v ? `${v.seccion?.propiedades?.nombre_referencial ?? ''} · ${v.seccion?.nombre ?? ''}` : '—';
+    } else if (c.origen === 'servicio') {
+      const d = mapDetalle.get(c.calculo_servicio_detalle_id);
+      deudor = d?.contrato_alquiler?.inquilino?.nombre ?? '—';
+      referencia = d ? `${d.seccion?.propiedades?.nombre_referencial ?? ''} · ${d.seccion?.nombre ?? ''} · ${d.calculo_periodo?.tipo_servicio?.nombre ?? ''}` : '—';
+    }
+    const totalPagado = (c.pagos ?? []).filter((p) => p.estado !== 'anulado').reduce((s, p) => s + Number(p.monto), 0);
+    return { ...c, deudor, referencia, totalPagado, saldo: Number(c.monto) + Number(c.mora_aplicada) - totalPagado };
+  });
+
+  if (search) {
+    const s = search.toLowerCase();
+    return enriched.filter((c) => c.deudor.toLowerCase().includes(s) || c.referencia.toLowerCase().includes(s) || (c.concepto ?? '').toLowerCase().includes(s));
+  }
+  return enriched;
+}
+
+export async function getCuota(id) {
+  const { data, error } = await supabase
+    .from('cuotas')
+    .select('*, pagos(id, monto, fecha_pago, medio_pago, n_operacion, estado, comprobante_url, foto_cobranza_url, notas, created_at)')
+    .eq('id', id).single();
+  if (error) throw error;
+  return data;
+}
+
+export async function aplicarMoraVencidas() {
+  const { data, error } = await supabase.rpc('aplicar_mora_cuotas_vencidas');
+  if (error) throw error;
+  return data;
+}
+
+export async function anularCuota(id) {
+  const { data, error } = await supabase.from('cuotas').update({ estado: 'anulada' }).eq('id', id).select().single();
+  if (error) throw error;
+  return data;
+}
+
+/* =================================== PAGOS ==================================== */
+export async function registrarPago(payload) {
+  const { data, error } = await supabase.from('pagos').insert(payload).select().single();
+  if (error) throw error;
+  return data;
+}
+
+export async function verificarPago(id) {
+  const { data, error } = await supabase
+    .from('pagos')
+    .update({ estado: 'verificado', fecha_verificacion: new Date().toISOString() })
+    .eq('id', id).select().single();
+  if (error) throw error;
+  return data;
+}
+
+export async function anularPago(id) {
+  const { data, error } = await supabase.from('pagos').update({ estado: 'anulado' }).eq('id', id).select().single();
+  if (error) throw error;
+  return data;
+}
+
+/* ===================== MODULO CALCULO DE SERVICIOS ============================ */
+export async function listTiposServicio() {
+  const { data, error } = await supabase.from('tipos_servicio').select('*').eq('activo', true).order('orden');
+  if (error) throw error;
+  return data;
+}
+
+export async function listMedidores({ propiedadId = '' } = {}) {
+  let query = supabase
+    .from('medidores')
+    .select('*, propiedad:propiedad_id(nombre_referencial), seccion:seccion_id(nombre), tipo_servicio:tipo_servicio_id(nombre, unidad_medida)')
+    .order('created_at', { ascending: false });
+  if (propiedadId) query = query.eq('propiedad_id', propiedadId);
+  const { data, error } = await query;
+  if (error) throw error;
+  return data;
+}
+
+export async function createMedidor(payload) {
+  const { data, error } = await supabase.from('medidores').insert(payload).select().single();
+  if (error) throw error;
+  return data;
+}
+
+export async function updateMedidor(id, payload) {
+  const { data, error } = await supabase.from('medidores').update(payload).eq('id', id).select().single();
+  if (error) throw error;
+  return data;
+}
+
+export async function deleteMedidor(id) {
+  const { error } = await supabase.from('medidores').delete().eq('id', id);
+  if (error) throw error;
+}
+
+export async function listLecturas({ medidorId = '', periodo = '' } = {}) {
+  let query = supabase
+    .from('lecturas_medidores')
+    .select('*, medidor:medidor_id(codigo_medidor, es_general, propiedad:propiedad_id(nombre_referencial), seccion:seccion_id(nombre), tipo_servicio:tipo_servicio_id(nombre, unidad_medida))')
+    .order('periodo', { ascending: false });
+  if (medidorId) query = query.eq('medidor_id', medidorId);
+  if (periodo) query = query.eq('periodo', periodo);
+  const { data, error } = await query;
+  if (error) throw error;
+  return data;
+}
+
+export async function getUltimaLectura(medidorId) {
+  const { data, error } = await supabase
+    .from('lecturas_medidores')
+    .select('periodo, lectura_actual')
+    .eq('medidor_id', medidorId)
+    .order('periodo', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) throw error;
+  return data;
+}
+
+export async function createLectura(payload) {
+  const { data, error } = await supabase.from('lecturas_medidores').insert(payload).select().single();
+  if (error) throw error;
+  return data;
+}
+
+export async function updateLectura(id, payload) {
+  const { data, error } = await supabase.from('lecturas_medidores').update(payload).eq('id', id).select().single();
+  if (error) throw error;
+  return data;
+}
+
+export async function listRecibosGenerales({ propiedadId = '' } = {}) {
+  let query = supabase
+    .from('recibos_generales_servicio')
+    .select('*, propiedad:propiedad_id(nombre_referencial), tipo_servicio:tipo_servicio_id(nombre)')
+    .order('periodo', { ascending: false });
+  if (propiedadId) query = query.eq('propiedad_id', propiedadId);
+  const { data, error } = await query;
+  if (error) throw error;
+  return data;
+}
+
+export async function createReciboGeneral(payload) {
+  const { data, error } = await supabase.from('recibos_generales_servicio').insert(payload).select().single();
+  if (error) throw error;
+  return data;
+}
+
+export async function updateReciboGeneral(id, payload) {
+  const { data, error } = await supabase.from('recibos_generales_servicio').update(payload).eq('id', id).select().single();
+  if (error) throw error;
+  return data;
+}
+
+export async function listCalculosPeriodo({ propiedadId = '' } = {}) {
+  let query = supabase
+    .from('calculo_servicios_periodo')
+    .select('*, propiedad:propiedad_id(nombre_referencial), tipo_servicio:tipo_servicio_id(nombre)')
+    .order('periodo', { ascending: false });
+  if (propiedadId) query = query.eq('propiedad_id', propiedadId);
+  const { data, error } = await query;
+  if (error) throw error;
+  return data;
+}
+
+export async function getDetalleCalculo(calculoPeriodoId) {
+  const { data, error } = await supabase
+    .from('calculo_servicios_detalle')
+    .select('*, seccion:seccion_id(nombre)')
+    .eq('calculo_periodo_id', calculoPeriodoId);
+  if (error) throw error;
+  return data;
+}
+
+export async function calcularPeriodoServicio({ propiedadId, tipoServicioId, periodo, reciboGeneralId, detalles }) {
+  const { data, error } = await supabase.rpc('calcular_periodo_servicio', {
+    p_propiedad_id: propiedadId,
+    p_tipo_servicio_id: tipoServicioId,
+    p_periodo: periodo,
+    p_recibo_general_id: reciboGeneralId,
+    p_detalles: detalles,
+  });
+  if (error) throw error;
+  return data;
+}
+
 /* ============================ DASHBOARD / KPIs ============================== */
 export async function getDashboardKpis() {
-  const [propiedades, secciones, personas, contratos] = await Promise.all([
+  const [propiedades, secciones, personas, contratos, cuotasPendientes] = await Promise.all([
     supabase.from('propiedades').select('id', { count: 'exact', head: true }),
     supabase.from('secciones').select('id, estado'),
     supabase.from('personas').select('id', { count: 'exact', head: true }),
     supabase.from('contratos_alquiler').select('id, estado'),
+    supabase.from('cuotas').select('id, monto, mora_aplicada, estado').in('estado', ['pendiente', 'parcial', 'vencida']),
   ]);
   if (propiedades.error) throw propiedades.error;
   if (secciones.error) throw secciones.error;
   if (personas.error) throw personas.error;
   if (contratos.error) throw contratos.error;
+  if (cuotasPendientes.error) throw cuotasPendientes.error;
+
+  const montoPendiente = (cuotasPendientes.data ?? []).reduce((s, c) => s + Number(c.monto) + Number(c.mora_aplicada), 0);
+  const cuotasVencidas = (cuotasPendientes.data ?? []).filter((c) => c.estado === 'vencida').length;
 
   const seccionesPorEstado = (secciones.data ?? []).reduce((acc, s) => {
     acc[s.estado] = (acc[s.estado] ?? 0) + 1;
@@ -210,5 +581,7 @@ export async function getDashboardKpis() {
     totalPersonas: personas.count ?? 0,
     contratosVigentes,
     contratosPorVencer,
+    montoPendiente,
+    cuotasVencidas,
   };
 }

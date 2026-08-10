@@ -4,7 +4,7 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Ingresar · Gestión Inmobiliaria</title>
-<link rel="icon" href="data:,">
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%231B3A5C'/%3E%3Ctext x='32' y='45' font-size='36' text-anchor='middle'%3E%F0%9F%8F%A2%3C/text%3E%3C/svg%3E">
 <link rel="stylesheet" href="../assets/css/variables.css" />
 <link rel="stylesheet" href="../assets/css/styles.css" />
 <link rel="stylesheet" href="../assets/css/components.css" />
@@ -60,8 +60,16 @@
   </div>
 
   <script type="module">
+    import { AUTH_ENABLED } from '../assets/js/config.js';
     import { getSession, requestMagicLink, getUrlAuthError } from '../assets/js/auth.js';
     import { validateForm, showToast, setLoading } from '../assets/js/utils.js';
+
+    // Login desactivado (AUTH_ENABLED = false en config.js): nadie debería
+    // aterrizar aquí, pero por si acaso, mandar directo al sistema en vez
+    // de mostrar el formulario.
+    if (!AUTH_ENABLED) {
+      window.location.href = '../index.html';
+    }
 
     // Si el enlace de acceso falló (vencido, o URL no autorizada en
     // Supabase), mostrar el motivo en vez de dejar al usuario sin pistas.
