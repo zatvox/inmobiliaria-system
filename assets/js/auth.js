@@ -64,7 +64,12 @@ export async function signOut() {
   if (!AUTH_ENABLED) return; // no hay sesión que cerrar en modo desarrollo
   await supabase.auth.signOut();
   cachedProfile = null;
-  window.location.href = resolvePath('pages/login.html');
+  // Mismo cálculo que requireAuth(): si ya estamos dentro de /pages/, el
+  // destino es "login.html" (vecino); si estamos en la raíz (index.html),
+  // el destino es "pages/login.html". (Antes esto lo hacía resolvePath()
+  // con una lógica rota que borraba "pages/" y mandaba a una URL 404.)
+  const loginPath = window.location.pathname.includes('/pages/') ? 'login.html' : 'pages/login.html';
+  window.location.href = loginPath;
 }
 
 export async function getSession() {
@@ -102,12 +107,6 @@ export async function getProfile() {
 
 export function isAdmin(profile) {
   return profile?.rol === 'administrador';
-}
-
-/** Ruta relativa correcta según si la página vive en / o en /pages/. */
-function resolvePath(path) {
-  const inPagesDir = window.location.pathname.includes('/pages/');
-  return inPagesDir ? `../${path.replace(/^pages\//, 'pages/').replace('pages/', '')}` : path;
 }
 
 /**
