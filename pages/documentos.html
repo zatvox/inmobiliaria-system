@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%231B3A5C'/%3E%3Ctext x='32' y='45' font-size='36' text-anchor='middle'%3E%F0%9F%8F%A2%3C/text%3E%3C/svg%3E">
+<title>Documentos · Gestión Inmobiliaria</title>
+<link rel="stylesheet" href="../assets/css/variables.css" />
+<link rel="stylesheet" href="../assets/css/styles.css" />
+<link rel="stylesheet" href="../assets/css/components.css" />
+<link rel="stylesheet" href="../assets/css/responsive.css" />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
+</head>
+<body data-page="documentos">
+  <div class="app-shell">
+    <div class="sidebar-backdrop"></div>
+    <aside class="sidebar">
+      <div class="sidebar-brand">
+        <div class="logo-mark">GI</div>
+        <span>Gestión Inmobiliaria</span>
+      </div>
+      <nav class="sidebar-nav" aria-label="Navegación principal">
+        <div class="nav-section-title">Operación</div>
+        <a class="nav-link" data-page="dashboard" href="../index.html"><span class="nav-icon">🏠</span> Dashboard</a>
+        <a class="nav-link" data-page="inmuebles" href="inmuebles.html"><span class="nav-icon">🏢</span> Inmuebles</a>
+        <a class="nav-link" data-page="personas" href="personas.html"><span class="nav-icon">👥</span> Personas</a>
+        <a class="nav-link" data-page="contratos" href="contratos.html"><span class="nav-icon">📄</span> Contratos</a>
+        <a class="nav-link" data-page="cobranzas" href="cobranzas.html"><span class="nav-icon">💰</span> Cobranzas y Pagos</a>
+        <a class="nav-link" data-page="servicios" href="servicios.html"><span class="nav-icon">⚡</span> Cálculo de Servicios</a>
+        <a class="nav-link" data-page="gastos" href="gastos.html"><span class="nav-icon">🧰</span> Gastos y Mantenimiento</a>
+        <div class="nav-section-title">Comercial</div>
+        <a class="nav-link" data-page="oportunidades" href="oportunidades.html"><span class="nav-icon">🎯</span> Oportunidades</a>
+        <a class="nav-link" data-page="documentos" href="documentos.html"><span class="nav-icon">📁</span> Documentos</a>
+        <a class="nav-link" aria-disabled="true" href="#"><span class="nav-icon">📊</span> Reportes <span class="badge-soon">Fase 4</span></a>
+        <div class="nav-section-title">Sistema</div>
+        <a class="nav-link" aria-disabled="true" href="#"><span class="nav-icon">⚙️</span> Configuración <span class="badge-soon">Fase 5</span></a>
+      </nav>
+      <div class="sidebar-footer">Fase 4 · v0.3</div>
+    </aside>
+
+    <div class="main-area">
+      <header class="topbar">
+        <div style="display:flex; align-items:center; gap:12px;">
+          <button class="sidebar-toggle" aria-label="Abrir menú">☰</button>
+          <span class="topbar-title">Documentos</span>
+        </div>
+        <div class="topbar-user">
+          <div class="user-chip">
+            <div class="user-avatar" id="user-avatar">?</div>
+            <div>
+              <div id="user-name" style="font-weight:600;">Cargando…</div>
+              <div id="user-role" style="font-size:12px; color:var(--gray-500);"></div>
+            </div>
+          </div>
+          <button class="btn btn-tertiary btn-sm" id="logout-btn">Salir</button>
+        </div>
+      </header>
+
+      <main class="content">
+        <div class="page-header">
+          <div>
+            <h1>Documentos</h1>
+            <p class="subtitle">Todo lo que se ha subido al sistema — fotos de inmuebles, medidores, recibos, vouchers, comprobantes de mantenimiento y tributos — en un solo lugar.</p>
+          </div>
+          <button class="btn btn-secondary" id="btn-recargar">Recargar</button>
+        </div>
+
+        <div style="display:flex; gap:12px; margin-bottom:12px; flex-wrap:wrap; align-items:center;">
+          <input type="text" id="search-input" placeholder="Buscar por nombre de archivo o referencia…" style="max-width:320px;" />
+          <select id="filter-categoria" style="max-width:260px;"><option value="">Todas las categorías</option></select>
+          <span id="documentos-total" style="font-size:13px; color:var(--gray-500);"></span>
+        </div>
+
+        <div class="table-wrap">
+          <table class="data-table">
+            <thead><tr><th>Categoría</th><th>Referencia</th><th>Archivo</th><th>Actualizado</th><th></th></tr></thead>
+            <tbody id="documentos-tbody"><tr><td colspan="5"><div class="skeleton" style="height:20px;"></div></td></tr></tbody>
+          </table>
+        </div>
+      </main>
+    </div>
+  </div>
+
+  <script type="module" src="../assets/js/documentos.js"></script>
+</body>
+</html>

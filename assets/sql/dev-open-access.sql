@@ -24,9 +24,10 @@ declare
     'empresas','usuarios_roles','personas','personas_roles','catalogos','tipos_servicio',
     'propiedades','propiedades_fotos','propiedades_documentos','secciones','secciones_fotos',
     'historial_precios','comisiones_agentes','contratos_alquiler','contratos_venta',
-    'oportunidades_venta','cuotas','pagos','medidores','lecturas_medidores',
+    'oportunidades','cuotas','pagos','medidores','lecturas_medidores',
     'recibos_generales_servicio','calculo_servicios_periodo','calculo_servicios_detalle',
-    'incidencias_mantenimiento','notificaciones','configuracion'
+    'incidencias_mantenimiento','notificaciones','configuracion',
+    'mantenimientos','mantenimientos_comprobantes','tributos_municipales'
   ];
 begin
   foreach t in array tablas loop

@@ -4,14 +4,14 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%231B3A5C'/%3E%3Ctext x='32' y='45' font-size='36' text-anchor='middle'%3E%F0%9F%8F%A2%3C/text%3E%3C/svg%3E">
-<title>Cobranzas · Gestión Inmobiliaria</title>
+<title>Oportunidades · Gestión Inmobiliaria</title>
 <link rel="stylesheet" href="../assets/css/variables.css" />
 <link rel="stylesheet" href="../assets/css/styles.css" />
 <link rel="stylesheet" href="../assets/css/components.css" />
 <link rel="stylesheet" href="../assets/css/responsive.css" />
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
 </head>
-<body data-page="cobranzas">
+<body data-page="oportunidades">
   <div class="app-shell">
     <div class="sidebar-backdrop"></div>
     <aside class="sidebar">
@@ -42,7 +42,7 @@
       <header class="topbar">
         <div style="display:flex; align-items:center; gap:12px;">
           <button class="sidebar-toggle" aria-label="Abrir menú">☰</button>
-          <span class="topbar-title">Cobranzas y Pagos</span>
+          <span class="topbar-title">Oportunidades</span>
         </div>
         <div class="topbar-user">
           <div class="user-chip">
@@ -59,122 +59,94 @@
       <main class="content">
         <div class="page-header">
           <div>
-            <h1>Cobranzas y Pagos</h1>
-            <p class="subtitle">Vista unificada de cuotas de alquiler, venta y servicios.</p>
+            <h1>Oportunidades</h1>
+            <p class="subtitle">Embudo comercial, sirve tanto para venta como para alquiler. Al cerrar, crea el contrato correspondiente en Contratos.</p>
           </div>
-          <button class="btn btn-secondary" id="btn-actualizar-vencidas" data-admin-only>Actualizar vencidas</button>
-        </div>
-
-        <div class="kpi-grid" style="margin-bottom:20px;">
-          <div class="kpi-card"><div class="kpi-label">Pendiente este mes</div><div class="kpi-value" id="kpi-pendiente">—</div></div>
-          <div class="kpi-card"><div class="kpi-label">Vencido (total)</div><div class="kpi-value" id="kpi-vencido" style="color:var(--color-danger);">—</div></div>
-          <div class="kpi-card"><div class="kpi-label">Cobrado este mes</div><div class="kpi-value" id="kpi-cobrado" style="color:var(--color-success);">—</div></div>
+          <button class="btn btn-primary" id="btn-nueva-oportunidad" data-admin-only>+ Nueva oportunidad</button>
         </div>
 
         <div class="tabs">
-          <button class="tab-btn active" data-tab="todas">Todas</button>
+          <button class="tab-btn active" data-tab="venta">Venta</button>
           <button class="tab-btn" data-tab="alquiler">Alquiler</button>
-          <button class="tab-btn" data-tab="venta">Venta</button>
-          <button class="tab-btn" data-tab="servicio">Servicios</button>
         </div>
 
         <div style="display:flex; gap:12px; margin-bottom:16px; flex-wrap:wrap;">
           <input type="text" id="search-input" placeholder="Buscar por nombre, sección o propiedad…" style="max-width:320px;" />
-          <select id="filter-estado" style="max-width:200px;">
-            <option value="">Todos los estados</option>
-            <option value="pendiente">Pendiente</option>
-            <option value="parcial">Parcial</option>
-            <option value="pagada">Pagada</option>
-            <option value="vencida">Vencida</option>
-            <option value="anulada">Anulada</option>
+          <select id="filter-etapa" style="max-width:220px;">
+            <option value="">Todas las etapas</option>
+            <option value="prospecto">Prospecto</option>
+            <option value="visita_agendada">Visita agendada</option>
+            <option value="negociacion">Negociación</option>
+            <option value="separacion">Separación</option>
+            <option value="firma_contrato">Firma de contrato</option>
+            <option value="cerrado">Cerrado</option>
+            <option value="perdido">Perdido</option>
           </select>
         </div>
 
         <div class="table-wrap">
           <table class="data-table">
-            <thead><tr><th>Deudor</th><th>Referencia</th><th>Concepto</th><th>Total</th><th>Saldo</th><th>Vence</th><th>Estado</th><th></th></tr></thead>
-            <tbody id="cuotas-tbody"><tr><td colspan="8"><div class="skeleton" style="height:20px;"></div></td></tr></tbody>
+            <thead><tr><th>Contacto</th><th>Inmueble</th><th>Fuente</th><th>Etapa</th><th>Actualizado</th><th></th></tr></thead>
+            <tbody id="oportunidades-tbody"><tr><td colspan="6"><div class="skeleton" style="height:20px;"></div></td></tr></tbody>
           </table>
-        </div>
-
-        <div class="card" style="margin-top:24px;">
-          <div class="card-title">Comisiones de agentes</div>
-          <div id="comisiones-wrap"><div class="skeleton" style="height:20px;"></div></div>
         </div>
       </main>
     </div>
   </div>
 
-  <!-- ============================ MODAL: REGISTRAR PAGO ============================ -->
-  <div class="modal-overlay" id="modal-pago" aria-hidden="true">
+  <!-- ============================ MODAL: OPORTUNIDAD ============================ -->
+  <div class="modal-overlay" id="modal-oportunidad" aria-hidden="true">
     <div class="modal">
       <div class="modal-header">
-        <h3>Registrar pago</h3>
+        <h3 id="modal-oportunidad-title">Nueva oportunidad</h3>
         <button class="modal-close" data-modal-close aria-label="Cerrar">×</button>
       </div>
-      <form id="form-pago">
+      <form id="form-oportunidad">
         <div class="modal-body">
-          <p id="pg-contexto" style="background:var(--gray-100); padding:10px; border-radius:8px; margin-bottom:16px;"></p>
           <div class="form-grid">
             <div class="form-field">
-              <label for="pg-monto">Monto pagado *</label>
-              <input type="number" id="pg-monto" step="0.01" min="0.01" required />
-              <div class="error-msg">Ingresa el monto pagado.</div>
-              <div class="hint">Puedes registrar un pago parcial (menor al saldo).</div>
+              <label for="op-tipo-operacion">Tipo *</label>
+              <select id="op-tipo-operacion" required>
+                <option value="venta">Venta</option>
+                <option value="alquiler">Alquiler</option>
+              </select>
             </div>
             <div class="form-field">
-              <label for="pg-fecha">Fecha de pago *</label>
-              <input type="date" id="pg-fecha" required />
-            </div>
-            <div class="form-field">
-              <label for="pg-medio">Medio de pago *</label>
-              <select id="pg-medio" required></select>
-            </div>
-            <div class="form-field">
-              <label for="pg-operacion">N° de operación</label>
-              <input type="text" id="pg-operacion" />
-            </div>
-            <div class="form-field">
-              <label for="pg-comprobante-file">Voucher / comprobante (foto)</label>
-              <input type="file" id="pg-comprobante-file" accept="image/*,.pdf" />
-            </div>
-            <div class="form-field">
-              <label for="pg-foto-file">Foto del recibo firmado</label>
-              <input type="file" id="pg-foto-file" accept="image/*" />
+              <label for="op-etapa">Etapa *</label>
+              <select id="op-etapa" required></select>
             </div>
             <div class="form-field full">
-              <label for="pg-notas">Notas</label>
-              <textarea id="pg-notas"></textarea>
+              <label for="op-seccion">Sección de interés</label>
+              <select id="op-seccion"></select>
+            </div>
+            <div class="form-field">
+              <label for="op-persona">Contacto *</label>
+              <select id="op-persona" required></select>
+              <div class="error-msg">Selecciona un contacto.</div>
+              <div class="hint">¿No aparece? Créalo primero en Personas (rol "Lead" recomendado).</div>
+            </div>
+            <div class="form-field">
+              <label for="op-fuente">Fuente</label>
+              <select id="op-fuente"></select>
+            </div>
+            <div class="form-field full" id="op-motivo-perdida-field" style="display:none;">
+              <label for="op-motivo-perdida">Motivo de la pérdida</label>
+              <input type="text" id="op-motivo-perdida" />
+            </div>
+            <div class="form-field full">
+              <label for="op-notas">Notas</label>
+              <textarea id="op-notas"></textarea>
             </div>
           </div>
         </div>
         <div class="modal-footer">
           <button type="button" class="btn btn-tertiary" data-modal-close>Cancelar</button>
-          <button type="submit" class="btn btn-primary" id="btn-guardar-pago">Registrar pago</button>
+          <button type="submit" class="btn btn-primary" id="btn-guardar-oportunidad">Guardar oportunidad</button>
         </div>
       </form>
     </div>
   </div>
 
-  <!-- ============================ MODAL: DETALLE CUOTA ============================ -->
-  <div class="modal-overlay" id="modal-detalle" aria-hidden="true">
-    <div class="modal">
-      <div class="modal-header">
-        <h3 id="detalle-title">Detalle</h3>
-        <button class="modal-close" data-modal-close aria-label="Cerrar">×</button>
-      </div>
-      <div class="modal-body">
-        <p id="detalle-resumen" style="margin-bottom:16px;"></p>
-        <h4 style="margin-bottom:8px;">Pagos registrados</h4>
-        <div id="detalle-pagos"></div>
-      </div>
-      <div class="modal-footer">
-        <button type="button" class="btn btn-danger" id="btn-anular-cuota" style="display:none;">Anular cuota</button>
-        <button type="button" class="btn btn-tertiary" data-modal-close>Cerrar</button>
-      </div>
-    </div>
-  </div>
-
-  <script type="module" src="../assets/js/cobranzas.js"></script>
+  <script type="module" src="../assets/js/oportunidades.js"></script>
 </body>
 </html>

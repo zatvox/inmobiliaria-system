@@ -77,33 +77,68 @@ export function showToast(message, type = 'info', duration = 4000) {
 }
 
 /* --------------------------------- Modales -------------------------------- */
+// Guarda una "foto" del estado de cada formulario al abrir su modal, para
+// poder detectar si el usuario hizo cambios antes de cerrar sin guardar.
+const modalSnapshots = new WeakMap();
+
+function serializeForm(form) {
+  return qsa('input, select, textarea', form).map((field) => {
+    if (field.type === 'file') return field.files?.length ? Array.from(field.files).map((f) => `${f.name}:${f.size}`).join(',') : '';
+    if (field.type === 'checkbox' || field.type === 'radio') return field.checked ? '1' : '0';
+    return field.value ?? '';
+  }).join('§');
+}
+
+function snapshotModal(overlay) {
+  const form = overlay.querySelector('form');
+  if (form) modalSnapshots.set(overlay, serializeForm(form));
+  else modalSnapshots.delete(overlay);
+}
+
+function modalHasUnsavedChanges(overlay) {
+  const form = overlay.querySelector('form');
+  if (!form || !modalSnapshots.has(overlay)) return false;
+  return serializeForm(form) !== modalSnapshots.get(overlay);
+}
+
 export function openModal(modalId) {
   const overlay = qs(`#${modalId}`);
   if (overlay) {
     overlay.classList.add('open');
     overlay.setAttribute('aria-hidden', 'false');
+    snapshotModal(overlay);
     const firstInput = overlay.querySelector('input, select, textarea, button');
     firstInput?.focus();
   }
 }
-export function closeModal(modalId) {
+// skipConfirm: true cuando el cierre es programático (ej. justo después de
+// guardar con éxito) — ahí no tiene sentido preguntar por cambios sin guardar.
+export function closeModal(modalId, { skipConfirm = true } = {}) {
   const overlay = qs(`#${modalId}`);
   if (overlay) {
+    if (!skipConfirm && modalHasUnsavedChanges(overlay)) {
+      if (!confirmAction('Tienes cambios sin guardar. ¿Seguro que quieres cerrar sin guardar?')) return false;
+    }
     overlay.classList.remove('open');
     overlay.setAttribute('aria-hidden', 'true');
+    modalSnapshots.delete(overlay);
   }
+  return true;
 }
 export function initModalDismiss() {
   qsa('.modal-overlay').forEach((overlay) => {
     overlay.addEventListener('click', (evt) => {
-      if (evt.target === overlay) overlay.classList.remove('open');
+      if (evt.target === overlay) closeModal(overlay.id, { skipConfirm: false });
     });
     overlay.querySelectorAll('[data-modal-close]').forEach((btn) => {
-      btn.addEventListener('click', () => overlay.classList.remove('open'));
+      btn.addEventListener('click', () => closeModal(overlay.id, { skipConfirm: false }));
     });
   });
   document.addEventListener('keydown', (evt) => {
-    if (evt.key === 'Escape') qsa('.modal-overlay.open').forEach((o) => o.classList.remove('open'));
+    if (evt.key === 'Escape') {
+      const open = qsa('.modal-overlay.open').pop();
+      if (open) closeModal(open.id, { skipConfirm: false });
+    }
   });
 }
 

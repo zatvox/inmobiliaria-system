@@ -113,8 +113,8 @@
 .badge-neutral { background: var(--gray-100); color: var(--gray-700); }
 
 /* Formularios ----------------------------------------------------------------- */
-.form-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: var(--space-4); }
-.form-field { display: flex; flex-direction: column; gap: var(--space-1); margin-bottom: var(--space-4); }
+.form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-4); }
+.form-field { display: flex; flex-direction: column; gap: var(--space-1); margin-bottom: var(--space-4); min-width: 0; }
 .form-field.full { grid-column: 1 / -1; }
 .form-field label { font-size: var(--fs-sm); font-weight: 600; color: var(--gray-700); }
 .form-field .hint { font-size: var(--fs-xs); color: var(--gray-500); }
@@ -134,10 +134,20 @@ select, textarea {
   background: var(--white);
   color: var(--gray-900);
   width: 100%;
+  box-sizing: border-box;
 }
 textarea { min-height: 90px; resize: vertical; }
 input:focus, select:focus, textarea:focus { border-color: var(--color-primary); }
 input::placeholder, textarea::placeholder { color: var(--gray-500); }
+
+input[type="file"] {
+  width: 100%;
+  max-width: 100%;
+  min-height: 44px;
+  padding: 8px 0;
+  font-size: var(--fs-sm);
+  box-sizing: border-box;
+}
 
 .checkbox-row { display: flex; align-items: center; gap: var(--space-2); }
 .checkbox-row input[type="checkbox"] { width: 20px; height: 20px; }
@@ -176,6 +186,7 @@ table.data-table td.actions { display: flex; gap: var(--space-2); }
   max-width: 640px;
   max-height: 90vh;
   overflow-y: auto;
+  overflow-x: hidden;
 }
 .modal-header {
   display: flex; align-items: center; justify-content: space-between;

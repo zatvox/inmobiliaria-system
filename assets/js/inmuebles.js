@@ -295,6 +295,7 @@ function renderSecciones(secciones) {
       el('div', { class: 'seccion-info' }, [
         el('strong', {}, s.nombre),
         el('span', {}, `${s.tipo_seccion} · ${precioLabel}${s.area_m2 ? ' · ' + s.area_m2 + ' m²' : ''}`),
+        (s.partida_registral || s.codigo_pu_hr) ? el('span', { style: 'color:var(--gray-500); font-size:12px;' }, s.partida_registral ? `📋 Partida ${s.partida_registral}` : `📋 PU/HR ${s.codigo_pu_hr}`) : null,
         s.notas ? el('span', { style: 'color:var(--color-warning);' }, `📝 ${s.notas}`) : null,
       ]),
       el('div', { class: 'seccion-actions' }, [
@@ -329,6 +330,8 @@ function openSeccionModal(seccion = null) {
     qs('#s-precio-venta').value = seccion.precio_venta ?? '';
     qs('#s-medidor-luz').checked = !!seccion.tiene_medidor_propio_luz;
     qs('#s-medidor-agua').checked = !!seccion.tiene_medidor_propio_agua;
+    qs('#s-partida-registral').value = seccion.partida_registral ?? '';
+    qs('#s-pu-hr').value = seccion.codigo_pu_hr ?? '';
     qs('#s-notas').value = seccion.notas ?? '';
   }
   openModal('modal-seccion');
@@ -353,6 +356,8 @@ function bindSeccionForm() {
       precio_venta: qs('#s-precio-venta').value ? Number(qs('#s-precio-venta').value) : null,
       tiene_medidor_propio_luz: qs('#s-medidor-luz').checked,
       tiene_medidor_propio_agua: qs('#s-medidor-agua').checked,
+      partida_registral: qs('#s-partida-registral').value || null,
+      codigo_pu_hr: qs('#s-pu-hr').value || null,
       notas: qs('#s-notas').value || null,
     };
     const btn = qs('#btn-guardar-seccion');

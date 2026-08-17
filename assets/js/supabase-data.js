@@ -43,7 +43,7 @@ export async function getPropiedad(id) {
       propiedades_documentos ( id, tipo, url_storage, descripcion ),
       secciones ( id, nombre, tipo_seccion, area_m2, habitaciones, banos, cocheras, estado,
                   precio_venta, precio_alquiler_referencial, tiene_medidor_propio_luz,
-                  tiene_medidor_propio_agua, orden, notas )
+                  tiene_medidor_propio_agua, partida_registral, codigo_pu_hr, orden, notas )
     `)
     .eq('id', id)
     .single();
@@ -198,7 +198,7 @@ export async function listSeccionesDisponibles({ paraVenta = false } = {}) {
 export async function listSeccionesPorPropiedad(propiedadId) {
   const { data, error } = await supabase
     .from('secciones')
-    .select('id, nombre, tipo_seccion, estado, tiene_medidor_propio_luz, tiene_medidor_propio_agua')
+    .select('id, nombre, tipo_seccion, estado, tiene_medidor_propio_luz, tiene_medidor_propio_agua, partida_registral, codigo_pu_hr')
     .eq('propiedad_id', propiedadId)
     .order('orden', { ascending: true });
   if (error) throw error;
@@ -547,6 +547,179 @@ export async function calcularPeriodoServicio({ propiedadId, tipoServicioId, per
   });
   if (error) throw error;
   return data;
+}
+
+/* ================================ OPORTUNIDADES ================================ */
+export async function listOportunidades({ tipoOperacion = '', etapa = '', search = '' } = {}) {
+  let query = supabase
+    .from('oportunidades')
+    .select(`
+      id, tipo_operacion, etapa, fuente, notas, motivo_perdida, fecha_creacion, updated_at,
+      contrato_venta_id, contrato_alquiler_id,
+      seccion:seccion_id ( id, nombre, propiedad_id, propiedades(nombre_referencial, distrito) ),
+      persona:persona_id ( id, nombre, telefono, email )
+    `)
+    .order('updated_at', { ascending: false });
+  if (tipoOperacion) query = query.eq('tipo_operacion', tipoOperacion);
+  if (etapa) query = query.eq('etapa', etapa);
+  const { data, error } = await query;
+  if (error) throw error;
+  if (search) {
+    const s = search.toLowerCase();
+    return data.filter((o) =>
+      o.persona?.nombre?.toLowerCase().includes(s) ||
+      o.seccion?.nombre?.toLowerCase().includes(s) ||
+      o.seccion?.propiedades?.nombre_referencial?.toLowerCase().includes(s));
+  }
+  return data;
+}
+
+export async function getOportunidad(id) {
+  const { data, error } = await supabase
+    .from('oportunidades')
+    .select(`*, seccion:seccion_id(id, nombre, propiedad_id, propiedades(nombre_referencial, distrito)), persona:persona_id(id, nombre)`)
+    .eq('id', id).single();
+  if (error) throw error;
+  return data;
+}
+
+export async function createOportunidad(payload) {
+  const { data, error } = await supabase.from('oportunidades').insert(payload).select().single();
+  if (error) throw error;
+  return data;
+}
+
+export async function updateOportunidad(id, payload) {
+  const { data, error } = await supabase.from('oportunidades').update(payload).eq('id', id).select().single();
+  if (error) throw error;
+  return data;
+}
+
+export async function deleteOportunidad(id) {
+  const { error } = await supabase.from('oportunidades').delete().eq('id', id);
+  if (error) throw error;
+}
+
+/* ================================ MANTENIMIENTOS ================================ */
+export async function listMantenimientos({ propiedadId = '' } = {}) {
+  let query = supabase
+    .from('mantenimientos')
+    .select('*, propiedad:propiedad_id(nombre_referencial), seccion:seccion_id(nombre), proveedor:proveedor_id(nombre)')
+    .order('fecha', { ascending: false });
+  if (propiedadId) query = query.eq('propiedad_id', propiedadId);
+  const { data, error } = await query;
+  if (error) throw error;
+  return data;
+}
+
+export async function getMantenimiento(id) {
+  const { data, error } = await supabase
+    .from('mantenimientos')
+    .select('*, propiedad:propiedad_id(nombre_referencial), seccion:seccion_id(nombre), proveedor:proveedor_id(nombre), mantenimientos_comprobantes(id, tipo_comprobante, url_storage, descripcion, monto, created_at)')
+    .eq('id', id).single();
+  if (error) throw error;
+  return data;
+}
+
+export async function createMantenimiento(payload) {
+  const { data, error } = await supabase.from('mantenimientos').insert(payload).select().single();
+  if (error) throw error;
+  return data;
+}
+
+export async function updateMantenimiento(id, payload) {
+  const { data, error } = await supabase.from('mantenimientos').update(payload).eq('id', id).select().single();
+  if (error) throw error;
+  return data;
+}
+
+export async function deleteMantenimiento(id) {
+  const { error } = await supabase.from('mantenimientos').delete().eq('id', id);
+  if (error) throw error;
+}
+
+export async function addMantenimientoComprobante(mantenimientoId, payload) {
+  const { data, error } = await supabase
+    .from('mantenimientos_comprobantes')
+    .insert({ mantenimiento_id: mantenimientoId, ...payload })
+    .select().single();
+  if (error) throw error;
+  return data;
+}
+
+export async function removeMantenimientoComprobante(id) {
+  const { error } = await supabase.from('mantenimientos_comprobantes').delete().eq('id', id);
+  if (error) throw error;
+}
+
+/* ============================== TRIBUTOS MUNICIPALES ============================= */
+export async function listTributos({ propiedadId = '', estadoPago = '' } = {}) {
+  let query = supabase
+    .from('tributos_municipales')
+    .select('*, propiedad:propiedad_id(nombre_referencial), seccion:seccion_id(nombre, partida_registral, codigo_pu_hr)')
+    .order('fecha_vencimiento', { ascending: true });
+  if (propiedadId) query = query.eq('propiedad_id', propiedadId);
+  if (estadoPago) query = query.eq('estado_pago', estadoPago);
+  const { data, error } = await query;
+  if (error) throw error;
+  return data;
+}
+
+export async function getTributo(id) {
+  const { data, error } = await supabase
+    .from('tributos_municipales')
+    .select('*, propiedad:propiedad_id(nombre_referencial), seccion:seccion_id(nombre, partida_registral, codigo_pu_hr)')
+    .eq('id', id).single();
+  if (error) throw error;
+  return data;
+}
+
+export async function createTributo(payload) {
+  const { data, error } = await supabase.from('tributos_municipales').insert(payload).select().single();
+  if (error) throw error;
+  return data;
+}
+
+export async function updateTributo(id, payload) {
+  const { data, error } = await supabase.from('tributos_municipales').update(payload).eq('id', id).select().single();
+  if (error) throw error;
+  return data;
+}
+
+/* ================================== DOCUMENTOS ================================== */
+/**
+ * Recorre el bucket completo (2 niveles: carpeta/entidad/archivo, que es la
+ * convención usada por uploadArchivo en todo el sistema) y devuelve una
+ * lista plana de archivos con su categoría, para el explorador de
+ * Documentos. No usa ninguna tabla — lee directo del Storage.
+ */
+export async function listAllArchivos() {
+  const { data: topLevel, error: topError } = await supabase.storage.from(STORAGE_BUCKET).list('', { limit: 200 });
+  if (topError) throw topError;
+  const carpetas = (topLevel ?? []).filter((item) => item.id === null);
+
+  const archivos = [];
+  for (const carpeta of carpetas) {
+    const { data: subLevel, error: subError } = await supabase.storage.from(STORAGE_BUCKET).list(carpeta.name, { limit: 500 });
+    if (subError) { console.error(subError); continue; }
+    const subcarpetas = (subLevel ?? []).filter((item) => item.id === null);
+    for (const sub of subcarpetas) {
+      const path = `${carpeta.name}/${sub.name}`;
+      const { data: files, error: filesError } = await supabase.storage.from(STORAGE_BUCKET).list(path, { limit: 500 });
+      if (filesError) { console.error(filesError); continue; }
+      (files ?? []).filter((f) => f.id !== null).forEach((f) => {
+        archivos.push({
+          categoria: carpeta.name,
+          entidadId: sub.name,
+          nombre: f.name,
+          path: `${path}/${f.name}`,
+          tamano: f.metadata?.size ?? null,
+          actualizado: f.updated_at ?? f.created_at ?? null,
+        });
+      });
+    }
+  }
+  return archivos;
 }
 
 /* ============================ DASHBOARD / KPIs ============================== */

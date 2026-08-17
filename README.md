@@ -6,7 +6,7 @@ Sistema propio (uso interno, una sola empresa) para administrar una cartera de i
 
 > ⚡ **Login desactivado por ahora (modo desarrollo).** `AUTH_ENABLED = false` en `assets/js/config.js` — el sistema entra directo como administrador, sin pantalla de login (uso interno de Luis y su hermano mientras se termina de construir). El login por correo con "magic link" ya está codificado en `auth.js`/`pages/login.html` y se puede reactivar más adelante. Ver la nota dentro de `config.js` para los detalles.
 
-## Estado actual: Fase 3 de 5
+## Estado actual: Fase 4 en curso (de 5)
 
 Este sistema se está construyendo **por fases**, revisando cada módulo con Luis antes de avanzar (ver `docs/ADDENDUM-SECCIONES-SERVICIOS.md`, sección 6).
 
@@ -15,10 +15,10 @@ Este sistema se está construyendo **por fases**, revisando cada módulo con Lui
 | **1** | Esquema completo de Supabase (todas las tablas del sistema) + RLS + datos semilla reales + módulos **Inmuebles y Secciones** + **Personas** | ✅ Entregado |
 | **2** | Contratos (alquiler y venta) + generación automática de cuotas | ✅ Entregado |
 | **3** | Cobranzas + Pagos + módulo **Cálculo de Servicios** (medidores, lecturas, recibos, cálculo de consumo) | ✅ Entregado |
-| 4 | Ventas (pipeline), Documentos, Reportes | Pendiente |
+| **4** | **Oportunidades** (embudo comercial venta/alquiler), **Documentos** (explorador del bucket), **Gastos y Mantenimiento** (inversiones + tributos municipales) | ✅ Entregado — falta **Reportes** |
 | 5 | Configuración completa (plantillas de contrato + generación de PDF), Usuarios y Roles, Notificaciones | Pendiente |
 
-El esquema de base de datos (`assets/sql/schema.sql` + `assets/sql/migrations-fase2-fase3.sql`) ya incluye **todas** las tablas y funciones necesarias para las 5 fases. La interfaz web tiene construidos los módulos de las Fases 1 a 3. El menú lateral muestra el resto de módulos (Ventas, Documentos, Reportes, Configuración) marcados como "Próximamente" con la fase en la que llegan.
+El esquema de base de datos (`assets/sql/schema.sql` + migraciones) ya incluye **todas** las tablas y funciones necesarias para las 5 fases. La interfaz web tiene construidos los módulos de las Fases 1 a 4 (menos Reportes). El menú lateral muestra el resto marcado como "Próximamente" con la fase en la que llega.
 
 ## Requisitos
 
@@ -37,7 +37,10 @@ inmobiliaria-system/
 │   ├── personas.html           # Módulo Personas
 │   ├── contratos.html          # Módulo Contratos (alquiler y venta) — Fase 2
 │   ├── cobranzas.html          # Módulo Cobranzas + Pagos — Fase 3
-│   └── servicios.html          # Módulo Cálculo de Servicios — Fase 3
+│   ├── servicios.html          # Módulo Cálculo de Servicios — Fase 3
+│   ├── oportunidades.html      # Módulo Oportunidades (pipeline venta/alquiler) — Fase 4
+│   ├── documentos.html         # Módulo Documentos (explorador del bucket) — Fase 4
+│   └── gastos.html             # Módulo Gastos y Mantenimiento (+ tributos municipales) — Fase 4
 ├── assets/
 │   ├── css/
 │   │   ├── variables.css       # Paleta de colores, tipografía, espaciado
@@ -56,13 +59,19 @@ inmobiliaria-system/
 │   │   ├── personas.js          # Lógica de pages/personas.html
 │   │   ├── contratos.js         # Lógica de pages/contratos.html
 │   │   ├── cobranzas.js         # Lógica de pages/cobranzas.html
-│   │   └── servicios.js         # Lógica de pages/servicios.html
+│   │   ├── servicios.js         # Lógica de pages/servicios.html
+│   │   ├── oportunidades.js     # Lógica de pages/oportunidades.html
+│   │   ├── documentos.js        # Lógica de pages/documentos.html
+│   │   └── gastos.js            # Lógica de pages/gastos.html
 │   └── sql/
-│       ├── schema.sql                    # Estructura completa de tablas (todas las fases)
-│       ├── rls-policies.sql              # Row Level Security por tabla
-│       ├── seed.sql                      # Datos reales de las 3 propiedades de Luis
-│       ├── migrations-fase2-fase3.sql    # Funciones/triggers de cuotas, pagos, mora y cálculo de servicios
-│       └── dev-open-access.sql           # Solo si usas AUTH_ENABLED=false sin sesión real (ver advertencia dentro)
+│       ├── schema.sql                              # Estructura completa de tablas (todas las fases)
+│       ├── rls-policies.sql                        # Row Level Security por tabla
+│       ├── seed.sql                                # Datos reales de las 3 propiedades de Luis
+│       ├── migrations-fase2-fase3.sql              # Funciones/triggers de cuotas, pagos, mora y cálculo de servicios
+│       ├── migrations-rol-aval.sql                 # Rol "aval" + aval_id en contratos
+│       ├── migrations-distritos-lima.sql           # Catálogo de los 43 distritos de Lima Metropolitana
+│       ├── migrations-gastos-oportunidades-docs.sql # Oportunidades, Mantenimientos, Tributos municipales
+│       └── dev-open-access.sql                     # Solo si usas AUTH_ENABLED=false sin sesión real (ver advertencia dentro)
 └── docs/
     └── ADDENDUM-SECCIONES-SERVICIOS.md   # Decisiones de diseño de Secciones,
                                             # Agentes/Comisiones y Cálculo de Servicios
