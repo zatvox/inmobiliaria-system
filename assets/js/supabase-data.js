@@ -433,12 +433,47 @@ export async function listTiposServicio() {
 export async function listMedidores({ propiedadId = '' } = {}) {
   let query = supabase
     .from('medidores')
-    .select('*, propiedad:propiedad_id(nombre_referencial), seccion:seccion_id(nombre), tipo_servicio:tipo_servicio_id(nombre, unidad_medida)')
+    .select('*, propiedad:propiedad_id(nombre_referencial), seccion:seccion_id(nombre), tipo_servicio:tipo_servicio_id(nombre, unidad_medida), cuenta_servicio:cuenta_servicio_id(id, codigo, nombre)')
     .order('created_at', { ascending: false });
   if (propiedadId) query = query.eq('propiedad_id', propiedadId);
   const { data, error } = await query;
   if (error) throw error;
   return data;
+}
+
+/* ------------------------------ Cuentas de servicio ---------------------------
+ * Representa una cuenta municipal independiente (ej. "Lt14") cuando una
+ * propiedad tiene varias cuentas del mismo servicio (agua/luz), cada una
+ * alimentando un subconjunto de medidores. Opcional: si una propiedad solo
+ * tiene una cuenta por servicio, no hace falta crear ninguna aquí.
+ * ------------------------------------------------------------------------- */
+export async function listCuentasServicio({ propiedadId = '', tipoServicioId = '' } = {}) {
+  let query = supabase
+    .from('cuentas_servicio')
+    .select('*, propiedad:propiedad_id(nombre_referencial), tipo_servicio:tipo_servicio_id(nombre)')
+    .order('codigo', { ascending: true });
+  if (propiedadId) query = query.eq('propiedad_id', propiedadId);
+  if (tipoServicioId) query = query.eq('tipo_servicio_id', tipoServicioId);
+  const { data, error } = await query;
+  if (error) throw error;
+  return data;
+}
+
+export async function createCuentaServicio(payload) {
+  const { data, error } = await supabase.from('cuentas_servicio').insert(payload).select().single();
+  if (error) throw error;
+  return data;
+}
+
+export async function updateCuentaServicio(id, payload) {
+  const { data, error } = await supabase.from('cuentas_servicio').update(payload).eq('id', id).select().single();
+  if (error) throw error;
+  return data;
+}
+
+export async function deleteCuentaServicio(id) {
+  const { error } = await supabase.from('cuentas_servicio').delete().eq('id', id);
+  if (error) throw error;
 }
 
 export async function createMedidor(payload) {
@@ -458,26 +493,37 @@ export async function deleteMedidor(id) {
   if (error) throw error;
 }
 
-export async function listLecturas({ medidorId = '', periodo = '' } = {}) {
+export async function listLecturas({ medidorId = '', periodo = '', propiedadId = '' } = {}) {
+  // !inner en el embed de medidor es necesario para que el filtro por
+  // propiedad_id se aplique también a las filas de nivel superior (lecturas),
+  // no solo al objeto anidado — si no, el filtro no tiene ningún efecto.
+  const embedMedidor = propiedadId ? 'medidor:medidor_id!inner' : 'medidor:medidor_id';
   let query = supabase
     .from('lecturas_medidores')
-    .select('*, medidor:medidor_id(codigo_medidor, es_general, propiedad:propiedad_id(nombre_referencial), seccion:seccion_id(nombre), tipo_servicio:tipo_servicio_id(nombre, unidad_medida))')
+    .select(`*, ${embedMedidor}(propiedad_id, codigo_medidor, es_general, propiedad:propiedad_id(nombre_referencial), seccion:seccion_id(nombre), tipo_servicio:tipo_servicio_id(nombre, unidad_medida))`)
     .order('periodo', { ascending: false });
   if (medidorId) query = query.eq('medidor_id', medidorId);
   if (periodo) query = query.eq('periodo', periodo);
+  if (propiedadId) query = query.eq('medidor.propiedad_id', propiedadId);
   const { data, error } = await query;
   if (error) throw error;
   return data;
 }
 
-export async function getUltimaLectura(medidorId) {
-  const { data, error } = await supabase
+// Trae la última lectura ANTERIOR a `antesDePeriodo` (formato 'YYYY-MM'), no
+// simplemente la más reciente en general — importante cuando se registran
+// lecturas fuera de orden (ej. primero agosto y luego, para completar el
+// historial, julio): la "lectura anterior" de julio debe ser la de junio,
+// no la de agosto que ya se cargó después.
+export async function getUltimaLectura(medidorId, antesDePeriodo = '') {
+  let query = supabase
     .from('lecturas_medidores')
     .select('periodo, lectura_actual')
     .eq('medidor_id', medidorId)
     .order('periodo', { ascending: false })
-    .limit(1)
-    .maybeSingle();
+    .limit(1);
+  if (antesDePeriodo) query = query.lt('periodo', antesDePeriodo);
+  const { data, error } = await query.maybeSingle();
   if (error) throw error;
   return data;
 }
@@ -497,7 +543,7 @@ export async function updateLectura(id, payload) {
 export async function listRecibosGenerales({ propiedadId = '' } = {}) {
   let query = supabase
     .from('recibos_generales_servicio')
-    .select('*, propiedad:propiedad_id(nombre_referencial), tipo_servicio:tipo_servicio_id(nombre)')
+    .select('*, propiedad:propiedad_id(nombre_referencial), tipo_servicio:tipo_servicio_id(nombre), cuenta_servicio:cuenta_servicio_id(id, codigo, nombre)')
     .order('periodo', { ascending: false });
   if (propiedadId) query = query.eq('propiedad_id', propiedadId);
   const { data, error } = await query;

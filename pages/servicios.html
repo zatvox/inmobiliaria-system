@@ -68,6 +68,7 @@
           <button class="tab-btn active" data-tab="medidores">Medidores</button>
           <button class="tab-btn" data-tab="lecturas">Lecturas del mes</button>
           <button class="tab-btn" data-tab="recibos">Recibos generales</button>
+          <button class="tab-btn" data-tab="cuentas">Cuentas de servicio</button>
           <button class="tab-btn" data-tab="calculo">Cálculo</button>
         </div>
 
@@ -97,8 +98,8 @@
           </div>
           <div class="table-wrap">
             <table class="data-table">
-              <thead><tr><th>Medidor</th><th>Servicio</th><th>Periodo</th><th>Lect. anterior</th><th>Lect. actual</th><th>Consumo</th><th>Foto</th></tr></thead>
-              <tbody id="lecturas-tbody"><tr><td colspan="7"><div class="skeleton" style="height:20px;"></div></td></tr></tbody>
+              <thead><tr><th>Medidor</th><th>Código</th><th>Servicio</th><th>Periodo</th><th>Lect. anterior</th><th>Lect. actual</th><th>Consumo</th><th></th></tr></thead>
+              <tbody id="lecturas-tbody"><tr><td colspan="8"><div class="skeleton" style="height:20px;"></div></td></tr></tbody>
             </table>
           </div>
         </div>
@@ -113,6 +114,21 @@
             <table class="data-table">
               <thead><tr><th>Propiedad</th><th>Servicio</th><th>Periodo</th><th>Monto total</th><th>Estado</th><th></th></tr></thead>
               <tbody id="recibos-tbody"><tr><td colspan="6"><div class="skeleton" style="height:20px;"></div></td></tr></tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- ============================= CUENTAS DE SERVICIO ============================== -->
+        <div class="tab-panel" id="panel-cuentas" style="display:none;">
+          <div class="page-header" style="margin-bottom:12px;">
+            <select id="filtro-cuenta-propiedad" class="select-propiedad" style="max-width:280px;"></select>
+            <button class="btn btn-primary" id="btn-nueva-cuenta" data-admin-only>+ Nueva cuenta</button>
+          </div>
+          <p class="subtitle" style="margin-bottom:12px;">Solo hace falta crear cuentas aquí si una propiedad tiene <strong>varias</strong> conexiones/recibos independientes del mismo servicio (ej. varias cuentas de agua). Si una propiedad tiene una sola cuenta por servicio, no necesitas nada de esta pestaña.</p>
+          <div class="table-wrap">
+            <table class="data-table">
+              <thead><tr><th>Propiedad</th><th>Servicio</th><th>Código</th><th>Nombre</th><th>Medidores asignados</th><th>Estado</th><th></th></tr></thead>
+              <tbody id="cuentas-tbody"><tr><td colspan="7"><div class="skeleton" style="height:20px;"></div></td></tr></tbody>
             </table>
           </div>
         </div>
@@ -135,7 +151,7 @@
                 <input type="month" id="ca-periodo" />
               </div>
             </div>
-            <button class="btn btn-secondary" id="btn-cargar-calculo">Cargar secciones</button>
+            <button class="btn btn-secondary" id="btn-cargar-calculo">Buscar recibos del periodo</button>
           </div>
 
           <div id="calculo-resultado" style="margin-top:20px;"></div>
@@ -178,6 +194,11 @@
               <input type="text" id="me-codigo" />
             </div>
             <div class="form-field">
+              <label for="me-cuenta">Cuenta de servicio (opcional)</label>
+              <select id="me-cuenta"><option value="">Sin cuenta específica</option></select>
+              <div class="hint">Solo si esta propiedad tiene varias cuentas de este servicio (ej. varias cuentas de agua).</div>
+            </div>
+            <div class="form-field">
               <label for="me-fecha-instalacion">Fecha de instalación</label>
               <input type="date" id="me-fecha-instalacion" />
             </div>
@@ -199,13 +220,18 @@
   <div class="modal-overlay" id="modal-lectura" aria-hidden="true">
     <div class="modal">
       <div class="modal-header">
-        <h3>Registrar lectura</h3>
+        <h3 id="modal-lectura-title">Registrar lectura</h3>
         <button class="modal-close" data-modal-close aria-label="Cerrar">×</button>
       </div>
       <form id="form-lectura">
         <div class="modal-body">
           <div class="form-grid">
-            <div class="form-field full">
+            <div class="form-field">
+              <label for="le-propiedad">Propiedad</label>
+              <select id="le-propiedad" class="select-propiedad"></select>
+              <div class="hint">Filtra la lista de medidores de abajo.</div>
+            </div>
+            <div class="form-field">
               <label for="le-medidor">Medidor *</label>
               <select id="le-medidor" required><option value="">Selecciona…</option></select>
             </div>
@@ -219,8 +245,8 @@
             </div>
             <div class="form-field">
               <label for="le-lectura-anterior">Lectura anterior</label>
-              <input type="number" id="le-lectura-anterior" step="0.001" readonly style="background:var(--gray-100);" />
-              <div class="hint">Se completa sola con la última lectura registrada.</div>
+              <input type="number" id="le-lectura-anterior" step="0.001" />
+              <div class="hint">Se sugiere sola con la lectura del periodo anterior a este; corrígela si hace falta (ej. al registrar meses fuera de orden).</div>
             </div>
             <div class="form-field">
               <label for="le-lectura-actual">Lectura actual *</label>
@@ -263,6 +289,11 @@
               <select id="re-tipo-servicio" class="select-tipo-servicio" required></select>
             </div>
             <div class="form-field">
+              <label for="re-cuenta">Cuenta de servicio (opcional)</label>
+              <select id="re-cuenta"><option value="">Cuenta única de la propiedad</option></select>
+              <div class="hint">Elige la cuenta si esta propiedad tiene varias (ej. Lt14, Lt15). Si tiene una sola, déjalo así.</div>
+            </div>
+            <div class="form-field">
               <label for="re-periodo">Periodo *</label>
               <input type="month" id="re-periodo" required />
             </div>
@@ -292,6 +323,47 @@
         <div class="modal-footer">
           <button type="button" class="btn btn-tertiary" data-modal-close>Cancelar</button>
           <button type="submit" class="btn btn-primary" id="btn-guardar-recibo">Guardar recibo</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ============================ MODAL: CUENTA DE SERVICIO ============================ -->
+  <div class="modal-overlay" id="modal-cuenta" aria-hidden="true">
+    <div class="modal">
+      <div class="modal-header">
+        <h3 id="modal-cuenta-title">Nueva cuenta de servicio</h3>
+        <button class="modal-close" data-modal-close aria-label="Cerrar">×</button>
+      </div>
+      <form id="form-cuenta">
+        <div class="modal-body">
+          <div class="form-grid">
+            <div class="form-field">
+              <label for="cu-propiedad">Propiedad *</label>
+              <select id="cu-propiedad" class="select-propiedad" required></select>
+            </div>
+            <div class="form-field">
+              <label for="cu-tipo-servicio">Servicio *</label>
+              <select id="cu-tipo-servicio" class="select-tipo-servicio" required></select>
+            </div>
+            <div class="form-field">
+              <label for="cu-codigo">Código de la cuenta *</label>
+              <input type="text" id="cu-codigo" required placeholder="Ej. Lt14" />
+              <div class="error-msg">Ingresa un código para identificar la cuenta.</div>
+            </div>
+            <div class="form-field">
+              <label for="cu-nombre">Nombre (opcional)</label>
+              <input type="text" id="cu-nombre" placeholder="Ej. Cuenta Sedapal Lt14" />
+            </div>
+            <div class="form-field full">
+              <label for="cu-notas">Notas</label>
+              <textarea id="cu-notas"></textarea>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-tertiary" data-modal-close>Cancelar</button>
+          <button type="submit" class="btn btn-primary" id="btn-guardar-cuenta">Guardar cuenta</button>
         </div>
       </form>
     </div>

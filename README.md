@@ -71,6 +71,7 @@ inmobiliaria-system/
 │       ├── migrations-rol-aval.sql                 # Rol "aval" + aval_id en contratos
 │       ├── migrations-distritos-lima.sql           # Catálogo de los 43 distritos de Lima Metropolitana
 │       ├── migrations-gastos-oportunidades-docs.sql # Oportunidades, Mantenimientos, Tributos municipales
+│       ├── migrations-cuentas-servicio.sql          # Cuentas de servicio (varios recibos por propiedad/periodo)
 │       └── dev-open-access.sql                     # Solo si usas AUTH_ENABLED=false sin sesión real (ver advertencia dentro)
 └── docs/
     └── ADDENDUM-SECCIONES-SERVICIOS.md   # Decisiones de diseño de Secciones,

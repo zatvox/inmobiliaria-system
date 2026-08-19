@@ -21,6 +21,7 @@ En el panel de Supabase, ve a **SQL Editor** → **New query**, y ejecuta los ar
 5. `assets/sql/migrations-rol-aval.sql` — rol "aval" en Personas + campo opcional en Contratos.
 6. `assets/sql/migrations-distritos-lima.sql` — catálogo con los 43 distritos de Lima Metropolitana (opcional pero recomendado).
 7. `assets/sql/migrations-gastos-oportunidades-docs.sql` — módulos de Fase 4: renombra `oportunidades_venta` a `oportunidades` (con tipo venta/alquiler), crea `mantenimientos` + `mantenimientos_comprobantes` + `tributos_municipales`, y agrega partida registral / código PU-HR a Secciones. **Obligatorio** para Oportunidades y Gastos y Mantenimiento.
+8. `assets/sql/migrations-cuentas-servicio.sql` — crea `cuentas_servicio` (para propiedades con varias cuentas de agua/luz independientes, ej. Lt14/Lt15/Lt7 en Santa Rosa de Lima) y permite varios recibos generales por propiedad/servicio/periodo. **Obligatorio** para Cálculo de Servicios en propiedades con más de una cuenta por servicio.
 
 `assets/sql/email-lookup-function.sql` quedó del flujo de login por correo (actualmente desactivado) — no hace falta correrlo mientras `AUTH_ENABLED = false`.
 
