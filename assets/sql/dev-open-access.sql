@@ -27,7 +27,9 @@ declare
     'oportunidades','cuotas','pagos','medidores','lecturas_medidores',
     'recibos_generales_servicio','calculo_servicios_periodo','calculo_servicios_detalle',
     'incidencias_mantenimiento','notificaciones','configuracion',
-    'mantenimientos','mantenimientos_comprobantes','tributos_municipales','cuentas_servicio'
+    'mantenimientos','mantenimientos_comprobantes','tributos_municipales','cuentas_servicio',
+    'medidores_reparto','configuracion_sistema','contratos_alquiler_servicios_fijos',
+    'contratos_alquiler_secciones'
   ];
 begin
   foreach t in array tablas loop
@@ -65,7 +67,9 @@ create policy dev_anon_storage_delete on storage.objects
 --     'oportunidades','cuotas','pagos','medidores','lecturas_medidores',
 --     'recibos_generales_servicio','calculo_servicios_periodo','calculo_servicios_detalle',
 --     'incidencias_mantenimiento','notificaciones','configuracion',
---     'mantenimientos','mantenimientos_comprobantes','tributos_municipales','cuentas_servicio'
+--     'mantenimientos','mantenimientos_comprobantes','tributos_municipales','cuentas_servicio',
+--     'medidores_reparto','configuracion_sistema','contratos_alquiler_servicios_fijos',
+--     'contratos_alquiler_secciones'
 --   ];
 -- begin
 --   foreach t in array tablas loop

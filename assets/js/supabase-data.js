@@ -210,11 +210,13 @@ export async function listContratosAlquiler({ search = '' } = {}) {
   let query = supabase
     .from('contratos_alquiler')
     .select(`
-      id, monto_renta, moneda, dia_vencimiento, fecha_inicio, fecha_fin, estado, deposito_garantia, renovacion_automatica, notas,
+      id, monto_renta, moneda, dia_vencimiento, fecha_inicio, fecha_fin, estado, deposito_garantia, renovacion_automatica, notas, n_ocupantes,
       seccion:seccion_id ( id, nombre, propiedad_id, propiedades(nombre_referencial, distrito) ),
       inquilino:inquilino_id ( id, nombre, telefono ),
       agente:agente_id ( id, nombre ),
-      aval:aval_id ( id, nombre, telefono )
+      aval:aval_id ( id, nombre, telefono ),
+      servicios_fijos:contratos_alquiler_servicios_fijos ( id, tipo_servicio_id, monto_fijo, notas ),
+      secciones_contrato:contratos_alquiler_secciones ( id, seccion_id, monto_renta, fecha_inicio, fecha_fin, es_adenda, numero_adenda, notas, seccion:seccion_id(id, nombre) )
     `)
     .order('fecha_inicio', { ascending: false });
   const { data, error } = await query;
@@ -232,7 +234,7 @@ export async function listContratosAlquiler({ search = '' } = {}) {
 export async function getContratoAlquiler(id) {
   const { data, error } = await supabase
     .from('contratos_alquiler')
-    .select(`*, seccion:seccion_id(id, nombre, propiedad_id, propiedades(nombre_referencial, distrito)), inquilino:inquilino_id(id, nombre), agente:agente_id(id, nombre), aval:aval_id(id, nombre)`)
+    .select(`*, seccion:seccion_id(id, nombre, propiedad_id, propiedades(nombre_referencial, distrito)), inquilino:inquilino_id(id, nombre), agente:agente_id(id, nombre), aval:aval_id(id, nombre), servicios_fijos:contratos_alquiler_servicios_fijos(id, tipo_servicio_id, monto_fijo, notas), secciones_contrato:contratos_alquiler_secciones(id, seccion_id, monto_renta, fecha_inicio, fecha_fin, es_adenda, numero_adenda, notas, seccion:seccion_id(id, nombre, propiedad_id, propiedades(nombre_referencial, distrito)))`)
     .eq('id', id).single();
   if (error) throw error;
   return data;
@@ -246,6 +248,74 @@ export async function createContratoAlquiler(payload) {
 
 export async function updateContratoAlquiler(id, payload) {
   const { data, error } = await supabase.from('contratos_alquiler').update(payload).eq('id', id).select().single();
+  if (error) throw error;
+  return data;
+}
+
+// Secciones que cubre un contrato de alquiler (uno o varias — ej. un
+// inquilino que toma 2 pisos, o que amplía después con una "adenda" al
+// tomar un piso más). Reemplaza siempre TODA la lista, igual que
+// guardarRepartoMedidor/guardarServiciosFijosContrato — el caller
+// (contratos.js) ya arma cada fila con su es_adenda/numero_adenda correcto
+// antes de llamar, comparando contra lo que había cargado del contrato.
+export async function guardarSeccionesContrato(contratoAlquilerId, filas) {
+  const { error: delError } = await supabase.from('contratos_alquiler_secciones').delete().eq('contrato_alquiler_id', contratoAlquilerId);
+  if (delError) throw delError;
+  if (!filas.length) return [];
+  const rows = filas.map((f) => ({
+    contrato_alquiler_id: contratoAlquilerId,
+    seccion_id: f.seccion_id,
+    monto_renta: f.monto_renta,
+    fecha_inicio: f.fecha_inicio,
+    fecha_fin: f.fecha_fin ?? null,
+    es_adenda: !!f.es_adenda,
+    numero_adenda: f.numero_adenda ?? null,
+    notas: f.notas ?? null,
+  }));
+  const { data, error } = await supabase.from('contratos_alquiler_secciones').insert(rows).select();
+  if (error) throw error;
+  return data;
+}
+
+// Contratos de alquiler VIGENTES/por_vencer que cubren alguna de las
+// secciones dadas, con TODAS sus secciones (no solo las que coinciden) y sus
+// servicios de monto fijo — para poder prorratear un monto fijo de contrato
+// entre todas las secciones que le corresponden (ej. agua fija de un
+// contrato que cubre 3 pisos, repartida entre los que no tienen medidor).
+export async function listContratosVigentesConServiciosFijos(seccionIds) {
+  if (!seccionIds?.length) return [];
+  const { data: enlaces, error: e1 } = await supabase
+    .from('contratos_alquiler_secciones')
+    .select('contrato_alquiler_id, seccion_id, contrato:contrato_alquiler_id!inner(estado)')
+    .in('seccion_id', seccionIds)
+    .in('contrato.estado', ['vigente', 'por_vencer']);
+  if (e1) throw e1;
+  const contratoIds = [...new Set((enlaces ?? []).map((e) => e.contrato_alquiler_id))];
+  if (!contratoIds.length) return [];
+
+  const [{ data: todasSecciones, error: e2 }, { data: serviciosFijos, error: e3 }] = await Promise.all([
+    supabase.from('contratos_alquiler_secciones').select('contrato_alquiler_id, seccion_id').in('contrato_alquiler_id', contratoIds),
+    supabase.from('contratos_alquiler_servicios_fijos').select('contrato_alquiler_id, tipo_servicio_id, monto_fijo').in('contrato_alquiler_id', contratoIds),
+  ]);
+  if (e2) throw e2;
+  if (e3) throw e3;
+
+  const porContrato = new Map();
+  contratoIds.forEach((id) => porContrato.set(id, { contratoId: id, seccionIds: [], serviciosFijos: new Map() }));
+  (todasSecciones ?? []).forEach((r) => porContrato.get(r.contrato_alquiler_id)?.seccionIds.push(r.seccion_id));
+  (serviciosFijos ?? []).forEach((sf) => porContrato.get(sf.contrato_alquiler_id)?.serviciosFijos.set(sf.tipo_servicio_id, Number(sf.monto_fijo)));
+  return Array.from(porContrato.values());
+}
+
+// Montos fijos de servicio por contrato (ej. agua fija S/50/mes para un
+// local sin medidor) — reemplaza siempre TODA la lista del contrato, igual
+// que guardarRepartoMedidor: más simple que hacer diffs fila por fila.
+export async function guardarServiciosFijosContrato(contratoAlquilerId, items) {
+  const { error: delError } = await supabase.from('contratos_alquiler_servicios_fijos').delete().eq('contrato_alquiler_id', contratoAlquilerId);
+  if (delError) throw delError;
+  if (!items.length) return [];
+  const rows = items.map((it) => ({ contrato_alquiler_id: contratoAlquilerId, tipo_servicio_id: it.tipo_servicio_id, monto_fijo: it.monto_fijo, notas: it.notas ?? null }));
+  const { data, error } = await supabase.from('contratos_alquiler_servicios_fijos').insert(rows).select();
   if (error) throw error;
   return data;
 }
@@ -306,7 +376,35 @@ export async function listComisionesAgentes() {
     .select('id, agente_id, contrato_tipo, contrato_id, monto, porcentaje, estado, fecha_pago, notas, created_at, agente:agente_id(nombre)')
     .order('created_at', { ascending: false });
   if (error) throw error;
-  return data;
+
+  // contrato_id es una FK lógica (apunta a contratos_alquiler o
+  // contratos_venta según contrato_tipo, no hay una sola tabla), así que se
+  // resuelve el inquilino/comprador y la fecha de inicio con consultas
+  // aparte agrupadas por tipo — mismo patrón que ya usa listCuotas().
+  const idsAlquiler = data.filter((c) => c.contrato_tipo === 'alquiler').map((c) => c.contrato_id);
+  const idsVenta = data.filter((c) => c.contrato_tipo === 'venta').map((c) => c.contrato_id);
+  const [alquileres, ventas] = await Promise.all([
+    idsAlquiler.length
+      ? supabase.from('contratos_alquiler').select('id, fecha_inicio, inquilino:inquilino_id(nombre)').in('id', idsAlquiler)
+      : Promise.resolve({ data: [] }),
+    idsVenta.length
+      ? supabase.from('contratos_venta').select('id, fecha_firma, comprador:comprador_id(nombre)').in('id', idsVenta)
+      : Promise.resolve({ data: [] }),
+  ]);
+  const alquilerPorId = new Map((alquileres.data ?? []).map((c) => [c.id, c]));
+  const ventaPorId = new Map((ventas.data ?? []).map((c) => [c.id, c]));
+
+  return data.map((c) => {
+    if (c.contrato_tipo === 'alquiler') {
+      const contrato = alquilerPorId.get(c.contrato_id);
+      return { ...c, clienteNombre: contrato?.inquilino?.nombre ?? null, fechaInicioContrato: contrato?.fecha_inicio ?? null };
+    }
+    if (c.contrato_tipo === 'venta') {
+      const contrato = ventaPorId.get(c.contrato_id);
+      return { ...c, clienteNombre: contrato?.comprador?.nombre ?? null, fechaInicioContrato: contrato?.fecha_firma ?? null };
+    }
+    return { ...c, clienteNombre: null, fechaInicioContrato: null };
+  });
 }
 
 export async function marcarComisionPagada(id, comprobanteUrl = null) {
@@ -380,6 +478,69 @@ export async function listCuotas({ origen = '', estado = '', search = '' } = {})
   return enriched;
 }
 
+/* ================================= REPORTES =================================== */
+// Reporte consolidado de cuotas de servicio (agua/luz) de un periodo,
+// agrupable por inmueble — pensado para imprimirse como el control físico
+// que ya llevaban en Excel (columna INMUEBLE, INQUILINO, IMPORTE...).
+// Reutiliza el mismo patrón de listCuotas (contrato_id es FK lógica, así que
+// el detalle de cada cuota de servicio se resuelve en una consulta aparte).
+export async function listCuotasServicioParaReporte({ periodo, tipoServicioId = '', soloPendientes = true } = {}) {
+  if (!periodo) return [];
+  let query = supabase
+    .from('cuotas')
+    .select('id, calculo_servicio_detalle_id, concepto, monto, mora_aplicada, fecha_vencimiento, estado, pagos(id, monto, estado)')
+    .eq('origen', 'servicio')
+    .order('fecha_vencimiento', { ascending: true });
+  if (soloPendientes) query = query.neq('estado', 'anulada');
+  const { data: cuotas, error } = await query;
+  if (error) throw error;
+  if (!cuotas.length) return [];
+
+  const idsDetalle = cuotas.filter((c) => c.calculo_servicio_detalle_id).map((c) => c.calculo_servicio_detalle_id);
+  if (!idsDetalle.length) return [];
+  const { data: detalles, error: e2 } = await supabase
+    .from('calculo_servicios_detalle')
+    .select(`
+      id,
+      seccion:seccion_id(nombre, propiedad_id, propiedades(nombre_referencial)),
+      contrato_alquiler:contrato_alquiler_id(inquilino:inquilino_id(nombre)),
+      calculo_periodo:calculo_periodo_id!inner(periodo, tipo_servicio_id, propiedad_id, tipo_servicio:tipo_servicio_id(nombre))
+    `)
+    .in('id', idsDetalle)
+    .eq('calculo_periodo.periodo', periodo);
+  if (e2) throw e2;
+  const mapDetalle = new Map((detalles ?? []).map((d) => [d.id, d]));
+
+  const filtrado = tipoServicioId
+    ? (detalles ?? []).filter((d) => d.calculo_periodo?.tipo_servicio_id === tipoServicioId)
+    : (detalles ?? []);
+  const idsValidos = new Set(filtrado.map((d) => d.id));
+
+  return cuotas
+    .filter((c) => idsValidos.has(c.calculo_servicio_detalle_id))
+    .map((c) => {
+      const d = mapDetalle.get(c.calculo_servicio_detalle_id);
+      const totalPagado = (c.pagos ?? []).filter((p) => p.estado !== 'anulado').reduce((s, p) => s + Number(p.monto), 0);
+      const saldo = Number(c.monto) + Number(c.mora_aplicada) - totalPagado;
+      return {
+        id: c.id,
+        propiedadId: d?.seccion?.propiedad_id ?? d?.calculo_periodo?.propiedad_id ?? null,
+        propiedadNombre: d?.seccion?.propiedades?.nombre_referencial ?? '—',
+        seccionNombre: d?.seccion?.nombre ?? '—',
+        inquilinoNombre: d?.contrato_alquiler?.inquilino?.nombre ?? '—',
+        tipoServicioNombre: d?.calculo_periodo?.tipo_servicio?.nombre ?? '—',
+        concepto: c.concepto,
+        monto: Number(c.monto),
+        moraAplicada: Number(c.mora_aplicada),
+        totalPagado,
+        saldo,
+        estado: c.estado,
+        fechaVencimiento: c.fecha_vencimiento,
+      };
+    })
+    .filter((r) => !soloPendientes || r.saldo > 0.009);
+}
+
 export async function getCuota(id) {
   const { data, error } = await supabase
     .from('cuotas')
@@ -433,10 +594,26 @@ export async function listTiposServicio() {
 export async function listMedidores({ propiedadId = '' } = {}) {
   let query = supabase
     .from('medidores')
-    .select('*, propiedad:propiedad_id(nombre_referencial), seccion:seccion_id(nombre), tipo_servicio:tipo_servicio_id(nombre, unidad_medida), cuenta_servicio:cuenta_servicio_id(id, codigo, nombre)')
+    .select('*, propiedad:propiedad_id(nombre_referencial), seccion:seccion_id(nombre), tipo_servicio:tipo_servicio_id(nombre, unidad_medida), cuenta_servicio:cuenta_servicio_id(id, codigo, nombre), medidores_reparto(id, seccion_id, porcentaje, seccion:seccion_id(nombre))')
     .order('created_at', { ascending: false });
   if (propiedadId) query = query.eq('propiedad_id', propiedadId);
   const { data, error } = await query;
+  if (error) throw error;
+  return data;
+}
+
+/* ------------------------------ Reparto de medidores compartidos ---------------
+ * Un medidor "compartido" (es_compartido = true) no tiene seccion_id propia;
+ * en cambio, su consumo se reparte por porcentaje entre varias secciones
+ * (ej. un baño común entre 2 locales). guardarRepartoMedidor reemplaza el
+ * reparto completo de un medidor de una sola vez (borra y vuelve a insertar).
+ * ------------------------------------------------------------------------- */
+export async function guardarRepartoMedidor(medidorId, repartos) {
+  const { error: delError } = await supabase.from('medidores_reparto').delete().eq('medidor_id', medidorId);
+  if (delError) throw delError;
+  if (!repartos.length) return [];
+  const rows = repartos.map((r) => ({ medidor_id: medidorId, seccion_id: r.seccion_id, porcentaje: r.porcentaje }));
+  const { data, error } = await supabase.from('medidores_reparto').insert(rows).select();
   if (error) throw error;
   return data;
 }
@@ -493,36 +670,40 @@ export async function deleteMedidor(id) {
   if (error) throw error;
 }
 
-export async function listLecturas({ medidorId = '', periodo = '', propiedadId = '' } = {}) {
+export async function listLecturas({ medidorId = '', periodo = '', propiedadId = '', tipoServicioId = '' } = {}) {
   // !inner en el embed de medidor es necesario para que el filtro por
-  // propiedad_id se aplique también a las filas de nivel superior (lecturas),
-  // no solo al objeto anidado — si no, el filtro no tiene ningún efecto.
-  const embedMedidor = propiedadId ? 'medidor:medidor_id!inner' : 'medidor:medidor_id';
+  // propiedad_id / tipo_servicio_id se aplique también a las filas de nivel
+  // superior (lecturas), no solo al objeto anidado — si no, el filtro no
+  // tiene ningún efecto.
+  const embedMedidor = (propiedadId || tipoServicioId) ? 'medidor:medidor_id!inner' : 'medidor:medidor_id';
   let query = supabase
     .from('lecturas_medidores')
-    .select(`*, ${embedMedidor}(propiedad_id, codigo_medidor, es_general, propiedad:propiedad_id(nombre_referencial), seccion:seccion_id(nombre), tipo_servicio:tipo_servicio_id(nombre, unidad_medida))`)
-    .order('periodo', { ascending: false });
+    .select(`*, ${embedMedidor}(propiedad_id, seccion_id, tipo_servicio_id, codigo_medidor, es_general, es_compartido, propiedad:propiedad_id(nombre_referencial), seccion:seccion_id(nombre), tipo_servicio:tipo_servicio_id(nombre, unidad_medida), medidores_reparto(seccion_id))`)
+    .order('fecha_lectura', { ascending: false });
   if (medidorId) query = query.eq('medidor_id', medidorId);
   if (periodo) query = query.eq('periodo', periodo);
   if (propiedadId) query = query.eq('medidor.propiedad_id', propiedadId);
+  if (tipoServicioId) query = query.eq('medidor.tipo_servicio_id', tipoServicioId);
   const { data, error } = await query;
   if (error) throw error;
   return data;
 }
 
-// Trae la última lectura ANTERIOR a `antesDePeriodo` (formato 'YYYY-MM'), no
-// simplemente la más reciente en general — importante cuando se registran
-// lecturas fuera de orden (ej. primero agosto y luego, para completar el
-// historial, julio): la "lectura anterior" de julio debe ser la de junio,
-// no la de agosto que ya se cargó después.
-export async function getUltimaLectura(medidorId, antesDePeriodo = '') {
+// Trae la lectura ANTERIOR más reciente ANTES de `antesDeFecha` (formato
+// 'YYYY-MM-DD'), encadenando por FECHA real de lectura y no por el mes
+// calendario — importante cuando se registran lecturas fuera de orden (ej.
+// primero agosto y luego, para completar el historial, julio): la "lectura
+// anterior" de julio debe ser la de junio, no la de agosto que ya se cargó
+// después. Devuelve también su fecha, para poder autocompletar tanto la
+// fecha como el valor de "lectura anterior" del formulario.
+export async function getUltimaLectura(medidorId, antesDeFecha = '') {
   let query = supabase
     .from('lecturas_medidores')
-    .select('periodo, lectura_actual')
+    .select('fecha_lectura, lectura_actual')
     .eq('medidor_id', medidorId)
-    .order('periodo', { ascending: false })
+    .order('fecha_lectura', { ascending: false })
     .limit(1);
-  if (antesDePeriodo) query = query.lt('periodo', antesDePeriodo);
+  if (antesDeFecha) query = query.lt('fecha_lectura', antesDeFecha);
   const { data, error } = await query.maybeSingle();
   if (error) throw error;
   return data;
@@ -538,6 +719,11 @@ export async function updateLectura(id, payload) {
   const { data, error } = await supabase.from('lecturas_medidores').update(payload).eq('id', id).select().single();
   if (error) throw error;
   return data;
+}
+
+export async function deleteLectura(id) {
+  const { error } = await supabase.from('lecturas_medidores').delete().eq('id', id);
+  if (error) throw error;
 }
 
 export async function listRecibosGenerales({ propiedadId = '' } = {}) {
@@ -563,6 +749,11 @@ export async function updateReciboGeneral(id, payload) {
   return data;
 }
 
+export async function deleteReciboGeneral(id) {
+  const { error } = await supabase.from('recibos_generales_servicio').delete().eq('id', id);
+  if (error) throw error;
+}
+
 export async function listCalculosPeriodo({ propiedadId = '' } = {}) {
   let query = supabase
     .from('calculo_servicios_periodo')
@@ -583,14 +774,116 @@ export async function getDetalleCalculo(calculoPeriodoId) {
   return data;
 }
 
-export async function calcularPeriodoServicio({ propiedadId, tipoServicioId, periodo, reciboGeneralId, detalles }) {
+export async function calcularPeriodoServicio({ propiedadId, tipoServicioId, periodo, reciboGeneralId, detalles, precioUnitario = null }) {
   const { data, error } = await supabase.rpc('calcular_periodo_servicio', {
     p_propiedad_id: propiedadId,
     p_tipo_servicio_id: tipoServicioId,
     p_periodo: periodo,
     p_recibo_general_id: reciboGeneralId,
     p_detalles: detalles,
+    p_precio_unitario_override: precioUnitario,
   });
+  if (error) throw error;
+  return data;
+}
+
+// Junta el detalle de TODAS las cuentas ya calculadas de una propiedad +
+// servicio + periodo (agrupado por sección) y genera UNA cuota de cobranza
+// combinada por sección — exige que todas las cuentas de ese periodo ya
+// estén calculadas (si no, el RPC lanza error y se muestra como toast).
+export async function generarCobranzasServicio({ propiedadId, tipoServicioId, periodo }) {
+  const { data, error } = await supabase.rpc('generar_cobranzas_servicio', {
+    p_propiedad_id: propiedadId,
+    p_tipo_servicio_id: tipoServicioId,
+    p_periodo: periodo,
+  });
+  if (error) throw error;
+  return data;
+}
+
+// Detalle de cálculo (por sección) de TODAS las cuentas ya calculadas para
+// una propiedad + servicio + periodo — usado para saber si ya se generaron
+// las cobranzas (cuota_id no nulo) antes de habilitar el botón.
+export async function listDetalleCalculoPorPeriodo({ propiedadId, tipoServicioId, periodo }) {
+  const { data, error } = await supabase
+    .from('calculo_servicios_detalle')
+    .select('id, seccion_id, monto_calculado, cuota_id, calculo_periodo:calculo_periodo_id!inner(propiedad_id, tipo_servicio_id, periodo)')
+    .eq('calculo_periodo.propiedad_id', propiedadId)
+    .eq('calculo_periodo.tipo_servicio_id', tipoServicioId)
+    .eq('calculo_periodo.periodo', periodo);
+  if (error) throw error;
+  return data;
+}
+
+// Detalle "rico" (con lecturas, sección, cuenta e inquilino) de todas las
+// cuentas ya calculadas de una propiedad+servicio+periodo — usado para
+// armar el "cuadro de consumo" que se le presenta al inquilino (vista
+// previa en el tab Cálculo, antes de generar la cobranza combinada).
+const SELECT_DETALLE_CUADRO = `
+  id, seccion_id, metodo, consumo, precio_unitario_aplicado, n_personas, tarifa_por_persona, monto_calculado, cuota_id,
+  seccion:seccion_id(nombre, propiedades(nombre_referencial)),
+  lectura:lectura_id(periodo, fecha_lectura, fecha_lectura_anterior, lectura_anterior, lectura_actual, medidor:medidor_id(codigo_medidor, es_compartido)),
+  contrato_alquiler:contrato_alquiler_id(inquilino:inquilino_id(nombre)),
+  calculo_periodo:calculo_periodo_id!inner(
+    propiedad_id, tipo_servicio_id, periodo,
+    propiedad:propiedad_id(nombre_referencial),
+    tipo_servicio:tipo_servicio_id(nombre, unidad_medida),
+    recibo_general:recibo_general_id(cuenta_servicio:cuenta_servicio_id(codigo, nombre))
+  )
+`;
+
+export async function listDetalleCalculoConLecturas({ propiedadId, tipoServicioId, periodo }) {
+  const { data, error } = await supabase
+    .from('calculo_servicios_detalle')
+    .select(SELECT_DETALLE_CUADRO)
+    .eq('calculo_periodo.propiedad_id', propiedadId)
+    .eq('calculo_periodo.tipo_servicio_id', tipoServicioId)
+    .eq('calculo_periodo.periodo', periodo);
+  if (error) throw error;
+  return data;
+}
+
+// Mismo detalle "rico" pero filtrado por una cuota ya generada — usado
+// desde Cobranzas y Pagos para descargar el cuadro de una cuota puntual.
+export async function listDetalleCalculoPorCuota(cuotaId) {
+  const { data, error } = await supabase
+    .from('calculo_servicios_detalle')
+    .select(SELECT_DETALLE_CUADRO)
+    .eq('cuota_id', cuotaId);
+  if (error) throw error;
+  return data;
+}
+
+// Deshace el cálculo confirmado de UNA cuenta (borra calculo_servicios_periodo
+// + su detalle) para poder corregir una lectura y recalcular. El servidor
+// bloquea esto si ese detalle ya quedó ligado a una cuota generada.
+export async function deshacerCalculoServicio(reciboGeneralId) {
+  const { error } = await supabase.rpc('deshacer_calculo_servicio', { p_recibo_general_id: reciboGeneralId });
+  if (error) throw error;
+}
+
+// Elimina una cuota de servicio ya generada y libera su detalle de cálculo
+// (vuelve a quedar "pendiente de facturar"). El servidor bloquea esto si la
+// cuota ya tiene pagos registrados.
+export async function eliminarCuotaServicio(cuotaId) {
+  const { error } = await supabase.rpc('eliminar_cuota_servicio', { p_cuota_id: cuotaId });
+  if (error) throw error;
+}
+
+/* ============================ CONFIGURACIÓN DEL SISTEMA ======================= */
+// Tabla singleton (siempre 1 fila, id fijo) con variables globales editables
+// desde la pantalla de Configuración: precio por defecto de agua/luz,
+// moneda, mora, etc.
+export async function getConfiguracionSistema() {
+  const { data, error } = await supabase.from('configuracion_sistema').select('*').eq('id', true).maybeSingle();
+  if (error) throw error;
+  return data;
+}
+
+export async function updateConfiguracionSistema(payload) {
+  // upsert en vez de update plano: si por lo que sea la fila única (id=true)
+  // no existe todavía, la crea en vez de fallar con "0 rows" (PGRST116).
+  const { data, error } = await supabase.from('configuracion_sistema').upsert({ id: true, ...payload }).select().single();
   if (error) throw error;
   return data;
 }

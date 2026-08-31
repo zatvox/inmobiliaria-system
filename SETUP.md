@@ -14,20 +14,55 @@ Sigue estos pasos en orden. Tiempo estimado: 20-30 minutos la primera vez.
 
 En el panel de Supabase, ve a **SQL Editor** → **New query**, y ejecuta los archivos **en este orden exacto** (copia y pega el contenido completo de cada uno, un archivo por query, y dale "Run"):
 
-1. `assets/sql/schema.sql` — crea todas las tablas, triggers y funciones.
-2. `assets/sql/rls-policies.sql` — activa Row Level Security y las políticas por rol.
-3. `assets/sql/seed.sql` — carga los catálogos, tipos de servicio y las 3 propiedades reales.
-4. `assets/sql/migrations-fase2-fase3.sql` — funciones y triggers de Fase 2/3: generación de cuotas de venta, recálculo de estado de cuotas al pagar, mora sobre vencidas, y el cálculo de servicios (RPC `calcular_periodo_servicio`). **Obligatorio** para que los módulos Contratos, Cobranzas y Cálculo de Servicios funcionen.
-5. `assets/sql/migrations-rol-aval.sql` — rol "aval" en Personas + campo opcional en Contratos.
-6. `assets/sql/migrations-distritos-lima.sql` — catálogo con los 43 distritos de Lima Metropolitana (opcional pero recomendado).
-7. `assets/sql/migrations-gastos-oportunidades-docs.sql` — módulos de Fase 4: renombra `oportunidades_venta` a `oportunidades` (con tipo venta/alquiler), crea `mantenimientos` + `mantenimientos_comprobantes` + `tributos_municipales`, y agrega partida registral / código PU-HR a Secciones. **Obligatorio** para Oportunidades y Gastos y Mantenimiento.
-8. `assets/sql/migrations-cuentas-servicio.sql` — crea `cuentas_servicio` (para propiedades con varias cuentas de agua/luz independientes, ej. Lt14/Lt15/Lt7 en Santa Rosa de Lima) y permite varios recibos generales por propiedad/servicio/periodo. **Obligatorio** para Cálculo de Servicios en propiedades con más de una cuenta por servicio.
+Todos los archivos de `assets/sql/` llevan un número correlativo en el nombre (`01_`, `02_`...) que indica el orden exacto en que se deben correr — sigue ese número, no el orden alfabético por tema:
 
-`assets/sql/email-lookup-function.sql` quedó del flujo de login por correo (actualmente desactivado) — no hace falta correrlo mientras `AUTH_ENABLED = false`.
+1. `assets/sql/01_schema.sql` — crea todas las tablas, triggers y funciones.
+2. `assets/sql/02_rls-policies.sql` — activa Row Level Security y las políticas por rol.
+3. `assets/sql/03_seed.sql` — carga los catálogos, tipos de servicio y las 3 propiedades reales.
+4. `assets/sql/04_migrations-fase2-fase3.sql` — funciones y triggers de Fase 2/3: generación de cuotas de venta, recálculo de estado de cuotas al pagar, mora sobre vencidas, y el cálculo de servicios (RPC `calcular_periodo_servicio`). **Obligatorio** para que los módulos Contratos, Cobranzas y Cálculo de Servicios funcionen.
+5. `assets/sql/05_migrations-rol-aval.sql` — rol "aval" en Personas + campo opcional en Contratos.
+6. `assets/sql/06_migrations-distritos-lima.sql` — catálogo con los 43 distritos de Lima Metropolitana (opcional pero recomendado).
+7. `assets/sql/07_migrations-gastos-oportunidades-docs.sql` — módulos de Fase 4: renombra `oportunidades_venta` a `oportunidades` (con tipo venta/alquiler), crea `mantenimientos` + `mantenimientos_comprobantes` + `tributos_municipales`, y agrega partida registral / código PU-HR a Secciones. **Obligatorio** para Oportunidades y Gastos y Mantenimiento.
+8. `assets/sql/08_migrations-cuentas-servicio.sql` — crea `cuentas_servicio` (para propiedades con varias cuentas de agua/luz independientes, ej. Lt14/Lt15/Lt7 en Santa Rosa de Lima) y permite varios recibos generales por propiedad/servicio/periodo. **Obligatorio** para Cálculo de Servicios en propiedades con más de una cuenta por servicio.
+9. `assets/sql/09_migrations-medidores-compartidos.sql` — permite marcar un medidor como "compartido" entre varias secciones (ej. un baño común entre 2 locales) con reparto por porcentaje. **Obligatorio** si tienes medidores usados por más de una sección.
+10. `assets/sql/10_migrations-cobranza-servicios-combinada.sql` — separa "calcular una cuenta" de "generar la cobranza": ahora se puede calcular Lt14, Lt15 y Baño por separado y recién al final generar UNA sola cuota combinada por inquilino. **Obligatorio** para Cálculo de Servicios (reemplaza la función `calcular_periodo_servicio` y agrega `generar_cobranzas_servicio`).
+11. `assets/sql/11_migrations-precio-editable-cuadro.sql` — permite editar el precio S/ por m3/kWh al calcular una cuenta (antes era fijo, tomado del recibo general). **Obligatorio** para poder corregir el precio unitario desde el tab Cálculo.
+12. `assets/sql/12_migrations-configuracion-sistema.sql` — crea `configuracion_sistema` (tabla de variables globales: precio default de agua/luz, moneda, mora) para el nuevo módulo Configuración. **Obligatorio** para que la pantalla de Configuración (⚙️ en el header) funcione.
+13. `assets/sql/13_migrations-deshacer-calculo-servicio.sql` — agrega `eliminar_cuota_servicio` y `deshacer_calculo_servicio`, para poder corregir una lectura después de haber calculado una cuenta o generado su cobranza (ver "Corregir una lectura ya calculada" más abajo). **Obligatorio** para los botones "Deshacer cálculo" (Cálculo) y "Eliminar" (Cobranzas).
 
-Solo corre `assets/sql/dev-open-access.sql` si necesitas ver datos sin una sesión real de Supabase Auth activa (ver la nota de arriba) — abre RLS al rol `anon`, revisa la advertencia de seguridad dentro del archivo antes de correrlo.
+14. `assets/sql/16_fix-configuracion-sistema-fila.sql` — corrige el error "406 / Cannot coerce the result to a single JSON object" al guardar en Configuración (la fila única de `configuracion_sistema` no se había creado). **Obligatorio si ya corriste el paso 12 antes de esta corrección.**
+15. `assets/sql/17_migrations-lecturas-por-fecha.sql` — las lecturas ya no se organizan por "periodo" elegido a mano: se agrega `fecha_lectura_anterior` y un trigger calcula `periodo` solo, a partir del mes de la fecha de lectura actual. **Obligatorio** para que "Registrar lectura" funcione con los nuevos campos de fecha.
+16. `assets/sql/18_migrations-color-lineas-tabla.sql` — agrega `color_lineas_tabla` a Configuración, para poder cambiar el color de las líneas del cuadro de consumo (por defecto gris). **Obligatorio** para el campo de color en Configuración.
+17. `assets/sql/19_migrations-montos-fijos-contrato.sql` — agrega `n_ocupantes` a `contratos_alquiler` y la tabla `contratos_alquiler_servicios_fijos` (monto fijo mensual de agua/luz/etc. por contrato, para locales sin medidor propio como los de Edificio Polonia). También habilita `metodo = 'monto_fijo'` en `calculo_servicios_detalle`. **Obligatorio** para el editor de "Montos fijos de servicios" en Contratos y para que el Cálculo de Servicios los use. Después de correrlo, vuelve a correr `dev-open-access.sql` (agrega la tabla nueva a la lista de acceso abierto).
+18. `assets/sql/20_migrations-contrato-multi-seccion.sql` — un contrato de alquiler ya puede cubrir varias secciones (ej. un inquilino que toma 2-3 pisos), y ampliarse más adelante agregando otra sección como **adenda** (sin perder el contrato original). Crea la tabla `contratos_alquiler_secciones`, hace el backfill de los contratos existentes (cada uno queda como su propia "sección original") y actualiza los triggers que marcan una sección como alquilada/disponible. **Obligatorio** para el nuevo editor "Secciones del contrato" en Contratos. Después de correrlo, vuelve a correr `dev-open-access.sql`.
+19. **PRIMERO** `assets/sql/21a_revertir-mora-erronea-URGENTE.sql` — de un solo uso: quita la mora que "Actualizar vencidas" aplicó de más a cuotas de alquiler, venta y servicios (el bug del paso 20 de abajo). Solo hace falta correrlo si ya usaste ese botón alguna vez. **Después** corre `assets/sql/21_fix-mora-contrato-multiseccion-cobranzas.sql`, que corrige de raíz 3 bugs: (a) la mora usaba el % de una tabla vieja en vez del `% de mora mensual` de Configuración; (b) una sección agregada como adenda no encontraba su contrato al calcular un servicio; (c) `generar_cobranzas_servicio` creaba una cuota por SECCIÓN en vez de una por contrato/inquilino, así que un inquilino con 2+ secciones (ej. Edificio Polonia) salía con cuotas separadas en vez de una combinada. **Obligatorio** si usas contratos multi-sección con monto fijo de servicios o el botón "Actualizar vencidas".
+20. `assets/sql/21b_recalcular-contrato-detalle-pendiente.sql` — el fix del paso 19 solo corrige cálculos NUEVOS; si ya habías calculado/generado cobranzas de una sección de adenda ANTES del fix, esa fila quedó con el contrato viejo (null) guardado. Este script recalcula `contrato_alquiler_id` en todo el detalle que todavía no tiene cuota generada, sin tener que rehacer el cálculo desde la UI. **Corre esto** si después del paso 19 sigues viendo cuotas separadas por sección para un mismo inquilino — trae los 3 pasos exactos dentro del archivo (eliminar cuotas → correr el script → generar cobranzas de nuevo).
+
+Los siguientes dos son opcionales, por eso llevan `-OPCIONAL` en el nombre — sáltalos si no aplican a tu caso:
+
+- `assets/sql/14_fix-secciones-orden-OPCIONAL.sql` — solo si tu base de datos ya existía antes de que la columna `orden` estuviera en `01_schema.sql` (parche idempotente, no rompe nada si lo corres de más).
+- `assets/sql/15_email-lookup-function-OPCIONAL.sql` — quedó del flujo de login por correo (actualmente desactivado) — no hace falta correrlo mientras `AUTH_ENABLED = false`.
+
+`assets/sql/dev-open-access.sql` no lleva número porque no es parte de la secuencia de un solo uso — es un script que prendes/apagas según necesites (ver nota de abajo). Solo corre `assets/sql/dev-open-access.sql` si necesitas ver datos sin una sesión real de Supabase Auth activa (ver la nota de arriba) — abre RLS al rol `anon`, revisa la advertencia de seguridad dentro del archivo antes de correrlo. Cada vez que agregues una tabla nueva (por ejemplo, al correr una migración nueva) tienes que volver a correr este archivo para que el rol `anon` tenga acceso también a esa tabla.
+
+## Corregir una lectura de un medidor ya calculado
+
+Nunca se edita un cálculo confirmado directamente — siempre se deshace y se rehace, para no perder trazabilidad de lo ya cobrado:
+
+- **Si la cuenta todavía NO generó cobranza:** en el tab Cálculo, con la cuenta marcada "✓ Ya calculado", usa **"↩ Deshacer cálculo"** → corrige la lectura en "Lecturas del mes" → vuelve a **"Calcular esta cuenta"**.
+- **Si la cobranza YA se generó** (la cuota aparece en Cobranzas y Pagos): primero usa **"🗑️ Eliminar"** sobre esa cuota en Cobranzas y Pagos (si ya tiene pagos registrados, anúlalos antes desde "Ver") → eso libera el cálculo → "↩ Deshacer cálculo" de la cuenta afectada → corrige la lectura → recalcula esa cuenta → "Generar cobranzas del periodo" de nuevo (solo genera lo que falte, no duplica lo ya facturado).
 
 Si algún paso falla, revisa el mensaje de error antes de continuar — no saltes al siguiente archivo con un paso fallido.
+
+## Contrato que amplía secciones (adenda)
+
+Caso real: un inquilino ya tiene contrato por el 4to y 5to piso, y más adelante toma también el 6to. En el rubro esto se maneja con una **adenda**: un anexo que amplía el contrato original (mismo inquilino, mismo contrato) detallando el inmueble adicional, su propia mensualidad y sus propias fechas — sin anular ni re-firmar el contrato inicial. El sistema lo modela así:
+
+- En **Contratos → Editar** el contrato existente, en "Secciones del contrato" verás las secciones que ya tiene (4to y 5to). Usa **"+ Agregar sección"**, elige el 6to piso, su renta mensual y su fecha de inicio (la de la adenda, no la del contrato original).
+- La sección nueva queda etiquetada como **"Adenda 1"** (correlativo, sube con cada ampliación posterior) — el contrato original no se toca ni pierde sus datos.
+- La **renta mensual total** del contrato (columna "Renta" en la tabla y las cuotas que se generan) se recalcula automáticamente como la suma de todas sus secciones.
+- Si esa sección no tiene medidor propio y paga un monto fijo de agua/luz (ver "Montos fijos de servicios" en el mismo modal), ese monto se reparte en partes iguales entre las secciones del contrato que tampoco tengan medidor.
+- Recomendación operativa: sigue firmando la adenda en papel/PDF con el inquilino igual que un contrato normal (referenciando el contrato original) — el sistema solo lleva el registro de a qué secciones y montos corresponde cada ampliación, no reemplaza el documento legal.
 
 ## 3. Crear el bucket de Storage
 

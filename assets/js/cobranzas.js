@@ -8,8 +8,10 @@ import { isAdmin } from './auth.js';
 import {
   listCuotas, getCuota, aplicarMoraVencidas, registrarPago, verificarPago, anularPago, anularCuota,
   uploadArchivo, getSignedUrl, getCatalogo, listComisionesAgentes, marcarComisionPagada,
+  listDetalleCalculoPorCuota, eliminarCuotaServicio,
 } from './supabase-data.js';
 import { qs, qsa, el, formatCurrency, formatDate, badgeHtml, showToast, openModal, closeModal, validateForm, setLoading, confirmAction, debounce } from './utils.js';
+import { agruparDetalleParaCuadro, buildCuadroConsumoEl, descargarCuadroComoImagen, getColorLineasTabla } from './cuadro-consumo.js';
 
 let profile = null;
 let activeOrigen = '';
@@ -106,8 +108,58 @@ function renderRow(c) {
         ? el('button', { class: 'btn btn-primary btn-sm', onclick: () => openPagoModal(c) }, 'Registrar pago')
         : null,
       el('button', { class: 'btn btn-tertiary btn-sm', onclick: () => openDetalleModal(c.id) }, 'Ver'),
+      c.origen === 'servicio'
+        ? el('button', { class: 'btn btn-tertiary btn-sm', onclick: (evt) => descargarCuadroCuota(c, evt.target) }, '📷 Cuadro')
+        : null,
+      c.origen === 'servicio'
+        ? el('button', { class: 'btn btn-tertiary btn-sm', 'data-admin-only': '', onclick: (evt) => eliminarCuota(c, evt.target) }, '🗑️ Eliminar')
+        : null,
     ]),
   ]);
+}
+
+// Elimina una cuota de servicio ya generada (ej. para corregir una lectura
+// y recalcular) — el servidor la bloquea si ya tiene pagos registrados; en
+// ese caso hay que anular esos pagos primero desde "Ver".
+async function eliminarCuota(cuota, btn) {
+  if (!confirmAction(`¿Eliminar la cuota de ${cuota.deudor} (${cuota.referencia})? El consumo calculado volverá a quedar pendiente de facturar — podrás corregirlo y volver a generar la cobranza.`)) return;
+  setLoading(btn, true, 'Eliminando…');
+  try {
+    await eliminarCuotaServicio(cuota.id);
+    showToast('Cuota eliminada. El consumo asociado ya está disponible para recalcular/regenerar.', 'success');
+    await refresh();
+  } catch (err) {
+    console.error(err);
+    showToast(err.message ?? 'No se pudo eliminar la cuota.', 'error');
+    setLoading(btn, false);
+  }
+}
+
+/* ================== CUADRO DE CONSUMO (cuotas de servicio) ==================== */
+// Reconstruye el mismo "cuadro de consumo" que se ve en el tab Cálculo, a
+// partir del calculo_servicios_detalle ya ligado a esta cuota, y lo
+// descarga como imagen — para que el cobrador se lo pueda mostrar/enviar al
+// inquilino sin tener que volver al módulo de Cálculo de Servicios.
+async function descargarCuadroCuota(cuota, btn) {
+  setLoading(btn, true, 'Generando…');
+  try {
+    const [detalleRows, colorLineas] = await Promise.all([
+      listDetalleCalculoPorCuota(cuota.id),
+      getColorLineasTabla(),
+    ]);
+    if (!detalleRows.length) {
+      showToast('No se encontró el detalle de consumo de esta cuota (puede ser una cuota antigua sin cálculo asociado).', 'error');
+      return;
+    }
+    const [grupo] = agruparDetalleParaCuadro(detalleRows);
+    const cuadroEl = buildCuadroConsumoEl(grupo, { colorLineas });
+    await descargarCuadroComoImagen(cuadroEl, `cuadro-${grupo.tipoServicioNombre}-${grupo.seccionNombre}-${grupo.periodo}`.replace(/\s+/g, '-').toLowerCase());
+  } catch (err) {
+    console.error(err);
+    showToast(err.message ?? 'No se pudo generar el cuadro de esta cuota.', 'error');
+  } finally {
+    setLoading(btn, false);
+  }
 }
 
 /* ============================== REGISTRAR PAGO ================================ */
@@ -252,13 +304,15 @@ async function renderComisiones() {
       return;
     }
     const table = el('table', { class: 'data-table' }, [
-      el('thead', {}, [el('tr', {}, [el('th', {}, 'Agente'), el('th', {}, 'Tipo'), el('th', {}, 'Monto/%'), el('th', {}, 'Estado'), el('th', {}, '')])]),
+      el('thead', {}, [el('tr', {}, [el('th', {}, 'Agente'), el('th', {}, 'Tipo'), el('th', {}, 'Inquilino/Comprador'), el('th', {}, 'Fecha inicio contrato'), el('th', {}, 'Monto/%'), el('th', {}, 'Estado'), el('th', {}, '')])]),
     ]);
     const tbody = el('tbody');
     comisiones.forEach((c) => {
       tbody.append(el('tr', {}, [
         el('td', {}, c.agente?.nombre ?? '—'),
         el('td', {}, ORIGEN_LABELS[c.contrato_tipo] ?? c.contrato_tipo),
+        el('td', {}, c.clienteNombre ?? '—'),
+        el('td', {}, c.fechaInicioContrato ? formatDate(c.fechaInicioContrato) : '—'),
         el('td', {}, c.monto ? formatCurrency(c.monto) : `${c.porcentaje}%`),
         el('td', { html: badgeHtml(c.estado) }),
         el('td', {}, [

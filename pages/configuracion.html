@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%231B3A5C'/%3E%3Ctext x='32' y='45' font-size='36' text-anchor='middle'%3E%F0%9F%8F%A2%3C/text%3E%3C/svg%3E">
+<title>Configuración · Gestión Inmobiliaria</title>
+<link rel="stylesheet" href="../assets/css/variables.css" />
+<link rel="stylesheet" href="../assets/css/styles.css" />
+<link rel="stylesheet" href="../assets/css/components.css" />
+<link rel="stylesheet" href="../assets/css/responsive.css" />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
+</head>
+<body data-page="configuracion">
+  <div class="app-shell">
+    <div class="sidebar-backdrop"></div>
+    <aside class="sidebar">
+      <div class="sidebar-brand">
+        <div class="logo-mark">GI</div>
+        <span>Gestión Inmobiliaria</span>
+      </div>
+      <nav class="sidebar-nav" aria-label="Navegación principal">
+        <div class="nav-section-title">Operación</div>
+        <a class="nav-link" data-page="dashboard" href="../index.html"><span class="nav-icon">🏠</span> Dashboard</a>
+        <a class="nav-link" data-page="inmuebles" href="inmuebles.html"><span class="nav-icon">🏢</span> Inmuebles</a>
+        <a class="nav-link" data-page="personas" href="personas.html"><span class="nav-icon">👥</span> Personas</a>
+        <a class="nav-link" data-page="contratos" href="contratos.html"><span class="nav-icon">📄</span> Contratos</a>
+        <a class="nav-link" data-page="cobranzas" href="cobranzas.html"><span class="nav-icon">💰</span> Cobranzas y Pagos</a>
+        <a class="nav-link" data-page="servicios" href="servicios.html"><span class="nav-icon">⚡</span> Cálculo de Servicios</a>
+        <a class="nav-link" data-page="gastos" href="gastos.html"><span class="nav-icon">🧰</span> Gastos y Mantenimiento</a>
+        <div class="nav-section-title">Comercial</div>
+        <a class="nav-link" data-page="oportunidades" href="oportunidades.html"><span class="nav-icon">🎯</span> Oportunidades</a>
+        <a class="nav-link" data-page="documentos" href="documentos.html"><span class="nav-icon">📁</span> Documentos</a>
+        <a class="nav-link" data-page="reportes" href="reportes.html"><span class="nav-icon">📊</span> Reportes</a>
+        <div class="nav-section-title">Sistema</div>
+        <a class="nav-link" data-page="configuracion" href="configuracion.html"><span class="nav-icon">⚙️</span> Configuración</a>
+      </nav>
+      <div class="sidebar-footer">Fase 4 · v0.3</div>
+    </aside>
+
+    <div class="main-area">
+      <header class="topbar">
+        <div style="display:flex; align-items:center; gap:12px;">
+          <button class="sidebar-toggle" aria-label="Abrir menú">☰</button>
+          <span class="topbar-title">Configuración</span>
+        </div>
+        <div class="topbar-user">
+          <div class="user-chip">
+            <div class="user-avatar" id="user-avatar">?</div>
+            <div>
+              <div id="user-name" style="font-weight:600;">Cargando…</div>
+              <div id="user-role" style="font-size:12px; color:var(--gray-500);"></div>
+            </div>
+          </div>
+          <a class="btn btn-tertiary btn-sm" id="btn-configuracion" href="configuracion.html" title="Configuración del sistema" style="font-size:16px; padding:6px 10px;">⚙️</a>
+          <button class="btn btn-tertiary btn-sm" id="logout-btn">Salir</button>
+        </div>
+      </header>
+
+      <main class="content">
+        <div class="card" style="max-width:720px;">
+          <div class="card-title">Variables del sistema</div>
+          <p style="color:var(--gray-500); margin-bottom:16px;">
+            Estos valores se usan como punto de partida en otros módulos (por ejemplo, el precio S/ por m3 o kWh al calcular una cuenta en Cálculo de Servicios) — siempre se pueden corregir ahí mismo antes de confirmar.
+          </p>
+          <div id="config-solo-lectura" class="badge badge-neutral" style="display:none; margin-bottom:12px;">Solo un administrador puede editar estos valores. Estás viendo la configuración en modo lectura.</div>
+          <form id="form-configuracion">
+            <div class="form-grid">
+              <div class="form-field full">
+                <label for="cf-nombre-inmobiliaria">Nombre de la inmobiliaria</label>
+                <input type="text" id="cf-nombre-inmobiliaria" placeholder="Ej. Gestión Inmobiliaria Paz Vilca" />
+              </div>
+              <div class="form-field">
+                <label for="cf-precio-agua">Precio por defecto S/ por m3 de agua</label>
+                <input type="number" id="cf-precio-agua" min="0" step="0.0001" />
+                <span class="hint">Se usa solo si el recibo general no trae su propio precio ni consumo total.</span>
+              </div>
+              <div class="form-field">
+                <label for="cf-precio-luz">Precio por defecto S/ por kWh de luz</label>
+                <input type="number" id="cf-precio-luz" min="0" step="0.0001" />
+                <span class="hint">Igual que el de agua, pero para el servicio de luz.</span>
+              </div>
+              <div class="form-field">
+                <label for="cf-moneda">Moneda</label>
+                <select id="cf-moneda">
+                  <option value="PEN">Soles (PEN)</option>
+                  <option value="USD">Dólares (USD)</option>
+                </select>
+              </div>
+              <div class="form-field">
+                <label for="cf-dias-gracia">Días de gracia antes de mora</label>
+                <input type="number" id="cf-dias-gracia" min="0" step="1" />
+              </div>
+              <div class="form-field">
+                <label for="cf-porcentaje-mora">% de mora mensual</label>
+                <input type="number" id="cf-porcentaje-mora" min="0" step="0.01" />
+                <span class="hint">Se aplica al usar "Actualizar vencidas" en Cobranzas y Pagos.</span>
+              </div>
+            </div>
+
+            <div class="card-title" style="font-size:15px; margin-top:8px;">Estilo del cuadro de consumo</div>
+            <p style="color:var(--gray-500); margin-bottom:16px;">
+              Es el "recibo" que se descarga como imagen para mostrarle al inquilino (Cálculo de Servicios y Cobranzas y Pagos).
+            </p>
+            <div class="form-grid">
+              <div class="form-field">
+                <label for="cf-color-lineas">Color de las líneas de la tabla</label>
+                <div style="display:flex; align-items:center; gap:10px;">
+                  <input type="color" id="cf-color-lineas" style="width:56px; height:38px; padding:2px; cursor:pointer;" />
+                  <input type="text" id="cf-color-lineas-hex" placeholder="#D1D5DB" style="max-width:120px;" />
+                </div>
+                <span class="hint">Por defecto es gris. Cambia también el color del selector de texto si prefieres escribir el código directamente.</span>
+              </div>
+            </div>
+            <button type="submit" class="btn btn-primary" id="btn-guardar-configuracion" data-admin-only>Guardar cambios</button>
+          </form>
+        </div>
+      </main>
+    </div>
+  </div>
+
+  <script type="module" src="../assets/js/configuracion.js"></script>
+</body>
+</html>

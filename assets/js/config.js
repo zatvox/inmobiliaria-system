@@ -3,7 +3,7 @@
  *
  * IMPORTANTE: la anon key es segura para exponer en un sitio estático
  * (GitHub Pages) SIEMPRE que la Row Level Security (RLS) esté activa en
- * todas las tablas — ver assets/sql/rls-policies.sql. Nunca pegues aquí la
+ * todas las tablas — ver assets/sql/02_rls-policies.sql. Nunca pegues aquí la
  * service_role key.
  *
  * Reemplaza estos dos valores con los de tu proyecto Supabase

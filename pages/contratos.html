@@ -31,9 +31,9 @@
         <div class="nav-section-title">Comercial</div>
         <a class="nav-link" data-page="oportunidades" href="oportunidades.html"><span class="nav-icon">🎯</span> Oportunidades</a>
         <a class="nav-link" data-page="documentos" href="documentos.html"><span class="nav-icon">📁</span> Documentos</a>
-        <a class="nav-link" aria-disabled="true" href="#"><span class="nav-icon">📊</span> Reportes <span class="badge-soon">Fase 4</span></a>
+        <a class="nav-link" data-page="reportes" href="reportes.html"><span class="nav-icon">📊</span> Reportes</a>
         <div class="nav-section-title">Sistema</div>
-        <a class="nav-link" aria-disabled="true" href="#"><span class="nav-icon">⚙️</span> Configuración <span class="badge-soon">Fase 5</span></a>
+        <a class="nav-link" data-page="configuracion" href="configuracion.html"><span class="nav-icon">⚙️</span> Configuración</a>
       </nav>
       <div class="sidebar-footer">Fase 4 · v0.3</div>
     </aside>
@@ -52,6 +52,7 @@
               <div id="user-role" style="font-size:12px; color:var(--gray-500);"></div>
             </div>
           </div>
+          <a class="btn btn-tertiary btn-sm" id="btn-configuracion" href="configuracion.html" title="Configuración del sistema" style="font-size:16px; padding:6px 10px;">⚙️</a>
           <button class="btn btn-tertiary btn-sm" id="logout-btn">Salir</button>
         </div>
       </header>
@@ -106,9 +107,11 @@
         <div class="modal-body">
           <div class="form-grid">
             <div class="form-field full">
-              <label for="al-seccion">Sección *</label>
-              <select id="al-seccion" required></select>
-              <div class="error-msg">Selecciona una sección.</div>
+              <label>Secciones del contrato *</label>
+              <div class="hint" style="margin-bottom:8px;">Un mismo contrato puede cubrir varias secciones (ej. un inquilino que alquila 2 pisos). Si ya tiene contrato y toma una sección adicional más adelante, agrégala aquí: quedará registrada como <strong>adenda</strong> (ampliación del contrato original, con su propia mensualidad y fechas) sin perder el contrato inicial.</div>
+              <div id="al-secciones-list"></div>
+              <button type="button" class="btn btn-tertiary btn-sm" id="btn-agregar-seccion" style="margin-top:6px;">+ Agregar sección</button>
+              <div class="error-msg" id="al-secciones-error" style="display:none;">Agrega al menos una sección con su renta mensual.</div>
             </div>
             <div class="form-field">
               <label for="al-inquilino">Inquilino *</label>
@@ -121,9 +124,8 @@
               <select id="al-agente"></select>
             </div>
             <div class="form-field">
-              <label for="al-monto">Renta mensual *</label>
-              <input type="number" id="al-monto" step="0.01" min="0" required />
-              <div class="error-msg">Ingresa el monto.</div>
+              <label for="al-monto">Renta mensual total (suma de secciones)</label>
+              <input type="number" id="al-monto" step="0.01" min="0" readonly style="background:var(--gray-100);" />
             </div>
             <div class="form-field">
               <label for="al-moneda">Moneda</label>
@@ -139,7 +141,12 @@
               <input type="number" id="al-deposito" step="0.01" min="0" />
             </div>
             <div class="form-field">
-              <label for="al-fecha-inicio">Fecha de inicio *</label>
+              <label for="al-ocupantes">N° de ocupantes</label>
+              <input type="number" id="al-ocupantes" min="0" step="1" />
+              <div class="hint">Referencial — cuántas personas van a habitar/trabajar ahí (útil al negociar el monto fijo de servicios de abajo).</div>
+            </div>
+            <div class="form-field">
+              <label for="al-fecha-inicio">Fecha de inicio del contrato *</label>
               <input type="date" id="al-fecha-inicio" required />
               <div class="error-msg">Ingresa la fecha de inicio.</div>
             </div>
@@ -179,6 +186,12 @@
                 <div style="flex:1;"><input type="number" id="al-comision-monto" step="0.01" min="0" placeholder="Monto fijo (S/)" /></div>
                 <div style="flex:1;"><input type="number" id="al-comision-porcentaje" step="0.01" min="0" max="100" placeholder="% del contrato" /></div>
               </div>
+            </div>
+            <div class="form-field full">
+              <label>Montos fijos de servicios (opcional)</label>
+              <div class="hint" style="margin-bottom:8px;">Solo si este local NO tiene medidor propio y paga un monto fijo mensual de agua/luz/etc — se usa en Cálculo de Servicios en vez de una lectura.</div>
+              <div id="al-servicios-fijos-list"></div>
+              <button type="button" class="btn btn-tertiary btn-sm" id="btn-agregar-servicio-fijo" style="margin-top:6px;">+ Agregar servicio con monto fijo</button>
             </div>
             <div class="form-field full">
               <label for="al-notas">Notas</label>

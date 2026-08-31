@@ -4,14 +4,28 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%231B3A5C'/%3E%3Ctext x='32' y='45' font-size='36' text-anchor='middle'%3E%F0%9F%8F%A2%3C/text%3E%3C/svg%3E">
-<title>Documentos · Gestión Inmobiliaria</title>
+<title>Reportes · Gestión Inmobiliaria</title>
 <link rel="stylesheet" href="../assets/css/variables.css" />
 <link rel="stylesheet" href="../assets/css/styles.css" />
 <link rel="stylesheet" href="../assets/css/components.css" />
 <link rel="stylesheet" href="../assets/css/responsive.css" />
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
+<style>
+  /* Hoja de control físico: se ve como el Excel que ya usan (agrupado por
+     inmueble, con columnas en blanco para llenar a mano al cobrar) y se
+     imprime limpio, sin sidebar/topbar/filtros. */
+  .reporte-header-inmueble td { background: var(--gray-100); font-weight: 700; }
+  .reporte-total-row td { font-weight: 700; border-top: 2px solid var(--gray-700); }
+  @media print {
+    .sidebar, .topbar, .no-print { display: none !important; }
+    .main-area { margin-left: 0 !important; }
+    .content { padding: 0 !important; }
+    body { background: #fff !important; }
+    .reporte-imprimible { border: none !important; box-shadow: none !important; }
+  }
+</style>
 </head>
-<body data-page="documentos">
+<body data-page="reportes">
   <div class="app-shell">
     <div class="sidebar-backdrop"></div>
     <aside class="sidebar">
@@ -42,7 +56,7 @@
       <header class="topbar">
         <div style="display:flex; align-items:center; gap:12px;">
           <button class="sidebar-toggle" aria-label="Abrir menú">☰</button>
-          <span class="topbar-title">Documentos</span>
+          <span class="topbar-title">Reportes</span>
         </div>
         <div class="topbar-user">
           <div class="user-chip">
@@ -58,30 +72,40 @@
       </header>
 
       <main class="content">
-        <div class="page-header">
-          <div>
-            <h1>Documentos</h1>
-            <p class="subtitle">Todo lo que se ha subido al sistema — fotos de inmuebles, medidores, recibos, vouchers, comprobantes de mantenimiento y tributos — en un solo lugar.</p>
+        <div class="card no-print" style="margin-bottom:16px;">
+          <div class="card-title">Cuotas por cobrar de servicios (agua / luz)</div>
+          <p style="color:var(--gray-500); margin-bottom:16px;">
+            Consolidado por inmueble de lo que falta cobrar en un periodo, con el detalle de cada inquilino a la par —
+            pensado para imprimirlo y llevar el control físico, igual que la hoja de Excel que ya usan.
+          </p>
+          <div class="form-grid">
+            <div class="form-field">
+              <label for="rp-periodo">Periodo (mes) *</label>
+              <input type="month" id="rp-periodo" />
+            </div>
+            <div class="form-field">
+              <label for="rp-servicio">Tipo de servicio</label>
+              <select id="rp-servicio"><option value="">Agua y Luz (todos)</option></select>
+            </div>
+            <div class="form-field">
+              <label for="rp-estado">Alcance</label>
+              <select id="rp-estado">
+                <option value="pendientes">Solo lo que falta cobrar</option>
+                <option value="todos">Todas (incluye ya pagadas)</option>
+              </select>
+            </div>
           </div>
-          <button class="btn btn-secondary" id="btn-recargar">Recargar</button>
+          <div style="display:flex; gap:8px; margin-top:8px;">
+            <button class="btn btn-primary" id="btn-generar-reporte">Generar reporte</button>
+            <button class="btn btn-tertiary" id="btn-imprimir-reporte" style="display:none;">🖼️ Descargar como imagen</button>
+          </div>
         </div>
 
-        <div style="display:flex; gap:12px; margin-bottom:12px; flex-wrap:wrap; align-items:center;">
-          <input type="text" id="search-input" placeholder="Buscar por nombre de archivo o referencia…" style="max-width:320px;" />
-          <select id="filter-categoria" style="max-width:260px;"><option value="">Todas las categorías</option></select>
-          <span id="documentos-total" style="font-size:13px; color:var(--gray-500);"></span>
-        </div>
-
-        <div class="table-wrap">
-          <table class="data-table">
-            <thead><tr><th>Categoría</th><th>Referencia</th><th>Archivo</th><th>Actualizado</th><th></th></tr></thead>
-            <tbody id="documentos-tbody"><tr><td colspan="5"><div class="skeleton" style="height:20px;"></div></td></tr></tbody>
-          </table>
-        </div>
+        <div id="reporte-resultado"></div>
       </main>
     </div>
   </div>
 
-  <script type="module" src="../assets/js/documentos.js"></script>
+  <script type="module" src="../assets/js/reportes.js"></script>
 </body>
 </html>

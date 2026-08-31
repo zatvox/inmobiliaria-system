@@ -15,10 +15,10 @@ Este sistema se está construyendo **por fases**, revisando cada módulo con Lui
 | **1** | Esquema completo de Supabase (todas las tablas del sistema) + RLS + datos semilla reales + módulos **Inmuebles y Secciones** + **Personas** | ✅ Entregado |
 | **2** | Contratos (alquiler y venta) + generación automática de cuotas | ✅ Entregado |
 | **3** | Cobranzas + Pagos + módulo **Cálculo de Servicios** (medidores, lecturas, recibos, cálculo de consumo) | ✅ Entregado |
-| **4** | **Oportunidades** (embudo comercial venta/alquiler), **Documentos** (explorador del bucket), **Gastos y Mantenimiento** (inversiones + tributos municipales) | ✅ Entregado — falta **Reportes** |
+| **4** | **Oportunidades** (embudo comercial venta/alquiler), **Documentos** (explorador del bucket), **Gastos y Mantenimiento** (inversiones + tributos municipales), **Reportes** (cuotas por cobrar de servicios, consolidado por inmueble) | ✅ Entregado |
 | 5 | Configuración completa (plantillas de contrato + generación de PDF), Usuarios y Roles, Notificaciones | Pendiente |
 
-El esquema de base de datos (`assets/sql/schema.sql` + migraciones) ya incluye **todas** las tablas y funciones necesarias para las 5 fases. La interfaz web tiene construidos los módulos de las Fases 1 a 4 (menos Reportes). El menú lateral muestra el resto marcado como "Próximamente" con la fase en la que llega.
+El esquema de base de datos (`assets/sql/01_schema.sql` + migraciones numeradas) ya incluye **todas** las tablas y funciones necesarias para las 5 fases. La interfaz web tiene construidos los módulos de las Fases 1 a 4 completas. El menú lateral muestra el resto marcado como "Próximamente" con la fase en la que llega.
 
 ## Requisitos
 
@@ -40,7 +40,9 @@ inmobiliaria-system/
 │   ├── servicios.html          # Módulo Cálculo de Servicios — Fase 3
 │   ├── oportunidades.html      # Módulo Oportunidades (pipeline venta/alquiler) — Fase 4
 │   ├── documentos.html         # Módulo Documentos (explorador del bucket) — Fase 4
-│   └── gastos.html             # Módulo Gastos y Mantenimiento (+ tributos municipales) — Fase 4
+│   ├── gastos.html             # Módulo Gastos y Mantenimiento (+ tributos municipales) — Fase 4
+│   ├── reportes.html           # Módulo Reportes (cuotas por cobrar de servicios, consolidado por inmueble) — Fase 4
+│   └── configuracion.html      # Módulo Configuración (variables globales) — acceso desde ⚙️ en el header
 ├── assets/
 │   ├── css/
 │   │   ├── variables.css       # Paleta de colores, tipografía, espaciado
@@ -62,17 +64,34 @@ inmobiliaria-system/
 │   │   ├── servicios.js         # Lógica de pages/servicios.html
 │   │   ├── oportunidades.js     # Lógica de pages/oportunidades.html
 │   │   ├── documentos.js        # Lógica de pages/documentos.html
-│   │   └── gastos.js            # Lógica de pages/gastos.html
-│   └── sql/
-│       ├── schema.sql                              # Estructura completa de tablas (todas las fases)
-│       ├── rls-policies.sql                        # Row Level Security por tabla
-│       ├── seed.sql                                # Datos reales de las 3 propiedades de Luis
-│       ├── migrations-fase2-fase3.sql              # Funciones/triggers de cuotas, pagos, mora y cálculo de servicios
-│       ├── migrations-rol-aval.sql                 # Rol "aval" + aval_id en contratos
-│       ├── migrations-distritos-lima.sql           # Catálogo de los 43 distritos de Lima Metropolitana
-│       ├── migrations-gastos-oportunidades-docs.sql # Oportunidades, Mantenimientos, Tributos municipales
-│       ├── migrations-cuentas-servicio.sql          # Cuentas de servicio (varios recibos por propiedad/periodo)
-│       └── dev-open-access.sql                     # Solo si usas AUTH_ENABLED=false sin sesión real (ver advertencia dentro)
+│   │   ├── gastos.js            # Lógica de pages/gastos.html
+│   │   ├── configuracion.js     # Lógica de pages/configuracion.html
+│   │   └── cuadro-consumo.js    # Cuadro de consumo (agrupa cuentas por sección, descarga como imagen) — usado por servicios.js y cobranzas.js
+│   └── sql/                                          # Todos los archivos numerados se corren en orden (ver SETUP.md paso 2)
+│       ├── 01_schema.sql                              # Estructura completa de tablas (todas las fases)
+│       ├── 02_rls-policies.sql                        # Row Level Security por tabla
+│       ├── 03_seed.sql                                # Datos reales de las 3 propiedades de Luis
+│       ├── 04_migrations-fase2-fase3.sql              # Funciones/triggers de cuotas, pagos, mora y cálculo de servicios
+│       ├── 05_migrations-rol-aval.sql                 # Rol "aval" + aval_id en contratos
+│       ├── 06_migrations-distritos-lima.sql           # Catálogo de los 43 distritos de Lima Metropolitana
+│       ├── 07_migrations-gastos-oportunidades-docs.sql # Oportunidades, Mantenimientos, Tributos municipales
+│       ├── 08_migrations-cuentas-servicio.sql          # Cuentas de servicio (varios recibos por propiedad/periodo)
+│       ├── 09_migrations-medidores-compartidos.sql     # Medidores compartidos entre secciones (reparto por %)
+│       ├── 10_migrations-cobranza-servicios-combinada.sql # Cobranza combinada: 1 cuota por inquilino, no 1 por cuenta
+│       ├── 11_migrations-precio-editable-cuadro.sql    # Precio S/ por m3/kWh editable al calcular una cuenta
+│       ├── 12_migrations-configuracion-sistema.sql     # Tabla configuracion_sistema (variables globales)
+│       ├── 13_migrations-deshacer-calculo-servicio.sql # Deshacer cálculo / eliminar cuota de servicio
+│       ├── 16_fix-configuracion-sistema-fila.sql       # Corrige la fila única de configuracion_sistema si no se creó
+│       ├── 17_migrations-lecturas-por-fecha.sql        # Lecturas por fecha anterior/actual — periodo ya no se elige a mano
+│       ├── 18_migrations-color-lineas-tabla.sql        # Color configurable de las líneas del cuadro de consumo
+│       ├── 19_migrations-montos-fijos-contrato.sql     # Monto fijo de servicios por contrato (n_ocupantes + metodo monto_fijo)
+│       ├── 20_migrations-contrato-multi-seccion.sql    # Un contrato puede cubrir varias secciones (+ adendas)
+│       ├── 21a_revertir-mora-erronea-URGENTE.sql       # Un solo uso: revierte mora mal aplicada por el bug del % de mora
+│       ├── 21_fix-mora-contrato-multiseccion-cobranzas.sql # Fix: % de mora, contrato en secciones-adenda, cuota por contrato no por sección
+│       ├── 21b_recalcular-contrato-detalle-pendiente.sql   # Recalcula contrato_alquiler_id en detalle ya calculado antes del fix
+│       ├── 14_fix-secciones-orden-OPCIONAL.sql         # Parche de columna `orden` (solo si tu BD es anterior a 01_schema.sql actual)
+│       ├── 15_email-lookup-function-OPCIONAL.sql       # Login por correo (desactivado, no requerido)
+│       └── dev-open-access.sql                        # Sin número: se prende/apaga aparte — solo si usas AUTH_ENABLED=false sin sesión real (ver advertencia dentro)
 └── docs/
     └── ADDENDUM-SECCIONES-SERVICIOS.md   # Decisiones de diseño de Secciones,
                                             # Agentes/Comisiones y Cálculo de Servicios
@@ -96,4 +115,4 @@ Una **propiedad** es el predio/edificio físico (ej. "Edificio República de Pol
 
 ## Datos ya cargados (seed)
 
-`assets/sql/seed.sql` carga las 3 propiedades reales que Luis compartió (Av. República de Polonia 721, Av. Santa Rosa de Lima Mz. S, Calle Ámsterdam 280) con sus secciones e inquilinos conocidos. **Varios montos y datos están marcados como "por confirmar"** porque se dieron de memoria con dudas — revísalos en el módulo Inmuebles y corrígelos ahí directamente.
+`assets/sql/03_seed.sql` carga las 3 propiedades reales que Luis compartió (Av. República de Polonia 721, Av. Santa Rosa de Lima Mz. S, Calle Ámsterdam 280) con sus secciones e inquilinos conocidos. **Varios montos y datos están marcados como "por confirmar"** porque se dieron de memoria con dudas — revísalos en el módulo Inmuebles y corrígelos ahí directamente.
