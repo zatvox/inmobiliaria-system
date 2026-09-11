@@ -23,7 +23,7 @@ let propiedadesCache = [];
 let tiposServicioCache = [];
 let cuentasCache = [];
 let configuracionCache = null;
-let vistaLecturas = 'lista'; // 'lista' | 'cuadro'
+let vistaLecturas = 'cuadro'; // 'lista' | 'cuadro' — por defecto cuadro (más rápido de leer)
 
 function periodoActual() {
   const d = new Date();
@@ -51,7 +51,10 @@ async function main() {
   [propiedadesCache, tiposServicioCache] = await Promise.all([listPropiedades(), listTiposServicio()]);
   fillPropiedadSelects();
   fillTipoServicioSelects();
-  fillServicioSelect();
+  fillServicioSelect('#filtro-lectura-servicio');
+  fillServicioSelect('#filtro-medidor-servicio');
+  fillServicioSelect('#filtro-recibo-servicio');
+  fillServicioSelect('#filtro-cuenta-servicio');
 
   bindTabs();
   bindMedidores();
@@ -60,6 +63,10 @@ async function main() {
   bindCuentas();
   bindCalculo();
 
+  // "Medidores" es la pestaña activa por defecto — sus pestañas de
+  // propiedad no pasan por bindTabs() hasta que el usuario cambia de tab,
+  // así que se pintan una vez aquí al cargar la página.
+  renderPropiedadTabs('#medidor-propiedad-tabs', '#filtro-medidor-propiedad', renderMedidores);
   await renderMedidores();
 }
 
@@ -83,10 +90,14 @@ function bindTabs() {
       activeTab = btn.dataset.tab;
       qsa('.tab-btn[data-tab]').forEach((b) => b.classList.toggle('active', b === btn));
       qsa('.tab-panel').forEach((p) => { p.style.display = p.id === `panel-${activeTab}` ? 'block' : 'none'; });
-      if (activeTab === 'medidores') await renderMedidores();
-      if (activeTab === 'lecturas') { renderLecturaPropiedadTabs(); await fillMedidorSelect(); await renderLecturas(); }
-      if (activeTab === 'recibos') await renderRecibos();
-      if (activeTab === 'cuentas') await renderCuentas();
+      if (activeTab === 'medidores') { renderPropiedadTabs('#medidor-propiedad-tabs', '#filtro-medidor-propiedad', renderMedidores); await renderMedidores(); }
+      if (activeTab === 'lecturas') {
+        renderPropiedadTabs('#lectura-propiedad-tabs', '#filtro-lectura-propiedad', async () => { await fillMedidorSelect(); await renderLecturas(); });
+        await fillMedidorSelect();
+        await renderLecturas();
+      }
+      if (activeTab === 'recibos') { renderPropiedadTabs('#recibo-propiedad-tabs', '#filtro-recibo-propiedad', renderRecibos); await renderRecibos(); }
+      if (activeTab === 'cuentas') { renderPropiedadTabs('#cuenta-propiedad-tabs', '#filtro-cuenta-propiedad', renderCuentas); await renderCuentas(); }
     });
   });
 }
@@ -94,28 +105,17 @@ function bindTabs() {
 /* ================================ MEDIDORES ================================== */
 async function renderMedidores() {
   const tbody = qs('#medidores-tbody');
+  const tipoServicioId = qs('#filtro-medidor-servicio')?.value ?? '';
   try {
-    const [medidores, contratos] = await Promise.all([
+    const [medidoresTodos, contratos] = await Promise.all([
       listMedidores({ propiedadId: qs('#filtro-medidor-propiedad').value }),
       listContratosAlquiler({}),
     ]);
+    const medidores = tipoServicioId ? medidoresTodos.filter((m) => m.tipo_servicio_id === tipoServicioId) : medidoresTodos;
     // Mapa sección → inquilino actual: el contrato vigente/por_vencer más
-    // reciente de esa sección (listContratosAlquiler ya viene ordenado por
-    // fecha_inicio desc, así que el primero que aparezca por sección es el
-    // más nuevo).
-    // Un contrato puede cubrir varias secciones (ver contratos_alquiler_secciones,
-    // ej. Piso 4 + Piso 5 bajo el mismo contrato/adenda) — hay que recorrer
-    // TODAS las que trae, no solo su seccion_id "principal", si no las
-    // secciones agregadas después quedan sin inquilino en esta tabla.
-    const inquilinoPorSeccion = new Map();
-    contratos
-      .filter((c) => c.estado === 'vigente' || c.estado === 'por_vencer')
-      .forEach((c) => {
-        const idsSecciones = c.secciones_contrato?.length ? c.secciones_contrato.map((sc) => sc.seccion_id) : [c.seccion_id];
-        idsSecciones.forEach((seccionId) => {
-          if (!inquilinoPorSeccion.has(seccionId)) inquilinoPorSeccion.set(seccionId, c.inquilino?.nombre ?? '—');
-        });
-      });
+    // reciente de esa sección, recorriendo TODAS las secciones del contrato
+    // (ver contratos_alquiler_secciones) — no solo su seccion_id "principal".
+    const inquilinoPorSeccion = buildInquilinoPorSeccion(contratos);
 
     tbody.innerHTML = '';
     if (!medidores.length) {
@@ -167,6 +167,7 @@ async function eliminarMedidor(medidor) {
 
 function bindMedidores() {
   qs('#filtro-medidor-propiedad')?.addEventListener('change', renderMedidores);
+  qs('#filtro-medidor-servicio')?.addEventListener('change', renderMedidores);
   qs('#btn-nuevo-medidor')?.addEventListener('click', () => openMedidorModal());
   qs('#me-es-general')?.addEventListener('change', toggleMedidorDueno);
   qs('#me-es-compartido')?.addEventListener('change', toggleMedidorDueno);
@@ -343,9 +344,14 @@ function colorServicio(nombreServicio) {
 // un <select> — el filtro real sigue siendo el <select> oculto
 // #filtro-lectura-propiedad (así todo el resto del código que ya lee su
 // .value no cambia); esto solo agrega una forma más rápida de fijarlo.
-function renderLecturaPropiedadTabs() {
-  const cont = qs('#lectura-propiedad-tabs');
-  const sel = qs('#filtro-lectura-propiedad');
+// Genérico: pinta pestañas ("pills") de propiedad que sincronizan un
+// <select> oculto — el filtro real sigue siendo ese <select> (así todo el
+// resto del código que ya lee su .value no cambia); esto solo agrega una
+// forma más rápida de saltar de un inmueble a otro. Reutilizado en
+// Medidores, Lecturas, Recibos generales y Cuentas de servicio.
+function renderPropiedadTabs(contenedorId, selectId, onChange) {
+  const cont = qs(contenedorId);
+  const sel = qs(selectId);
   if (!cont || !sel) return;
   cont.innerHTML = '';
   const opciones = [{ id: '', nombre_referencial: 'Todas' }, ...propiedadesCache];
@@ -357,9 +363,8 @@ function renderLecturaPropiedadTabs() {
       style: `border-radius:999px; ${activo ? 'background:var(--color-primary); color:#fff; border-color:var(--color-primary);' : 'background:#fff; color:var(--gray-500); border:1px solid var(--gray-300);'}`,
       onclick: async () => {
         sel.value = p.id;
-        renderLecturaPropiedadTabs();
-        await fillMedidorSelect();
-        await renderLecturas();
+        renderPropiedadTabs(contenedorId, selectId, onChange);
+        await onChange();
       },
     }, p.nombre_referencial);
     cont.append(btn);
@@ -398,15 +403,7 @@ async function renderLecturasLista() {
     ]);
     // Igual que en Medidores: un contrato puede cubrir varias secciones, hay
     // que recorrer todas (contratos_alquiler_secciones), no solo la principal.
-    const inquilinoPorSeccion = new Map();
-    contratos
-      .filter((c) => c.estado === 'vigente' || c.estado === 'por_vencer')
-      .forEach((c) => {
-        const idsSecciones = c.secciones_contrato?.length ? c.secciones_contrato.map((sc) => sc.seccion_id) : [c.seccion_id];
-        idsSecciones.forEach((seccionId) => {
-          if (!inquilinoPorSeccion.has(seccionId)) inquilinoPorSeccion.set(seccionId, c.inquilino?.nombre ?? '—');
-        });
-      });
+    const inquilinoPorSeccion = buildInquilinoPorSeccion(contratos);
 
     await renderLecturasPendientes(propiedadId, periodo, lecturas, tipoServicioId);
 
@@ -552,18 +549,52 @@ async function eliminarLectura(lectura) {
   }
 }
 
-function medidorLabel(m, { conPropiedad = false } = {}) {
+// inquilinoPorSeccion es opcional: cuando se pasa (ej. desde el modal de
+// Registrar lectura), antepone el inquilino actual por contrato al label —
+// así se puede buscar/reconocer el medidor correcto sin adivinar solo por
+// código o sección (un contrato puede cubrir varias secciones, ver
+// contratos_alquiler_secciones).
+function medidorLabel(m, { conPropiedad = false, inquilinoPorSeccion = null, incluirServicio = true } = {}) {
   const parts = [];
   if (conPropiedad) parts.push(m.propiedad?.nombre_referencial ?? '');
   parts.push(m.seccion?.nombre ? m.seccion.nombre : '(general)');
-  parts.push(m.tipo_servicio?.nombre ?? '');
+  if (incluirServicio) parts.push(m.tipo_servicio?.nombre ?? '');
   let label = parts.filter(Boolean).join(' · ');
-  if (m.codigo_medidor) label += ` · Cód. ${m.codigo_medidor}`;
+  if (m.codigo_medidor) label += (incluirServicio ? ' · Cód. ' : ' - Cód. ') + m.codigo_medidor;
+  if (inquilinoPorSeccion) {
+    let inquilino = '—';
+    if (m.es_compartido) {
+      const nombres = (m.medidores_reparto ?? []).map((r) => inquilinoPorSeccion.get(r.seccion_id)).filter(Boolean);
+      inquilino = nombres.length ? [...new Set(nombres)].join(' / ') : '—';
+    } else if (!m.es_general && m.seccion_id) {
+      inquilino = inquilinoPorSeccion.get(m.seccion_id) ?? '—';
+    } else if (m.es_general) {
+      inquilino = 'Medidor general';
+    }
+    label = `${inquilino} — ${label}`;
+  }
   return label;
 }
 
-function fillServicioSelect() {
-  const sel = qs('#filtro-lectura-servicio');
+// Construye el mapa sección → inquilino actual (contrato vigente/por_vencer
+// más reciente) recorriendo TODAS las secciones de cada contrato — no solo
+// su seccion_id "principal" — para cubrir contratos multi-sección/adenda.
+// Mismo patrón usado en renderMedidores y renderLecturasLista.
+function buildInquilinoPorSeccion(contratos) {
+  const inquilinoPorSeccion = new Map();
+  contratos
+    .filter((c) => c.estado === 'vigente' || c.estado === 'por_vencer')
+    .forEach((c) => {
+      const idsSecciones = c.secciones_contrato?.length ? c.secciones_contrato.map((sc) => sc.seccion_id) : [c.seccion_id];
+      idsSecciones.forEach((seccionId) => {
+        if (!inquilinoPorSeccion.has(seccionId)) inquilinoPorSeccion.set(seccionId, c.inquilino?.nombre ?? '—');
+      });
+    });
+  return inquilinoPorSeccion;
+}
+
+function fillServicioSelect(selector = '#filtro-lectura-servicio') {
+  const sel = qs(selector);
   if (!sel) return;
   const currentValue = sel.value;
   sel.innerHTML = '<option value="">Todos los servicios</option>';
@@ -586,13 +617,26 @@ async function fillMedidorSelect() {
 
 async function fillLecturaMedidorSelect() {
   const propiedadId = qs('#le-propiedad')?.value ?? '';
-  const medidores = await listMedidores({ propiedadId });
+  const tipoServicioId = qs('#le-servicio')?.value ?? '';
   const sel = qs('#le-medidor');
   if (!sel) return;
   const currentValue = sel.value;
-  sel.innerHTML = '<option value="">Selecciona…</option>';
-  medidores.forEach((m) => sel.append(el('option', { value: m.id }, medidorLabel(m, { conPropiedad: !propiedadId }))));
-  if (medidores.some((m) => m.id === currentValue)) sel.value = currentValue;
+  try {
+    const [medidoresTodos, contratos] = await Promise.all([
+      listMedidores({ propiedadId }),
+      listContratosAlquiler({}),
+    ]);
+    const inquilinoPorSeccion = buildInquilinoPorSeccion(contratos);
+    const medidores = tipoServicioId
+      ? medidoresTodos.filter((m) => m.tipo_servicio_id === tipoServicioId)
+      : medidoresTodos;
+    sel.innerHTML = '<option value="">Selecciona…</option>';
+    medidores.forEach((m) => sel.append(el('option', { value: m.id }, medidorLabel(m, { conPropiedad: !propiedadId, inquilinoPorSeccion, incluirServicio: false }))));
+    if (medidores.some((m) => m.id === currentValue)) sel.value = currentValue;
+  } catch (err) {
+    console.error(err);
+    showToast('No se pudieron cargar los medidores.', 'error');
+  }
 }
 
 function bindLecturas() {
@@ -603,6 +647,7 @@ function bindLecturas() {
   qs('#btn-nueva-lectura')?.addEventListener('click', () => openLecturaModal());
   qs('#btn-ver-cuadro')?.addEventListener('click', () => { vistaLecturas = vistaLecturas === 'cuadro' ? 'lista' : 'cuadro'; renderLecturas(); });
   qs('#le-propiedad')?.addEventListener('change', fillLecturaMedidorSelect);
+  qs('#le-servicio')?.addEventListener('change', fillLecturaMedidorSelect);
   qs('#le-medidor')?.addEventListener('change', actualizarLecturaAnterior);
   qs('#le-fecha-actual')?.addEventListener('change', actualizarLecturaAnterior);
 
@@ -667,6 +712,8 @@ async function openLecturaModal(lectura = null) {
   form.dataset.fotoUrlActual = lectura?.foto_url ?? '';
   qs('#modal-lectura-title').textContent = lectura ? 'Editar lectura' : 'Registrar lectura';
   qs('#le-propiedad').value = lectura?.medidor?.propiedad_id ?? qs('#filtro-lectura-propiedad')?.value ?? '';
+  fillServicioSelect('#le-servicio');
+  qs('#le-servicio').value = lectura?.medidor?.tipo_servicio_id ?? qs('#filtro-lectura-servicio')?.value ?? '';
   await fillLecturaMedidorSelect();
   if (lectura) {
     qs('#le-medidor').value = lectura.medidor_id;
@@ -686,7 +733,7 @@ async function openLecturaModal(lectura = null) {
 async function renderRecibos() {
   const tbody = qs('#recibos-tbody');
   try {
-    const recibos = await listRecibosGenerales({ propiedadId: qs('#filtro-recibo-propiedad').value });
+    const recibos = await listRecibosGenerales({ propiedadId: qs('#filtro-recibo-propiedad').value, tipoServicioId: qs('#filtro-recibo-servicio')?.value ?? '' });
     tbody.innerHTML = '';
     if (!recibos.length) {
       tbody.append(el('tr', {}, [el('td', { colspan: '6' }, [el('div', { class: 'empty-state' }, [el('div', { class: 'icon' }, '🧾'), el('p', {}, 'Sin recibos generales registrados.')])])]));
@@ -737,6 +784,7 @@ async function eliminarRecibo(recibo) {
 
 function bindRecibos() {
   qs('#filtro-recibo-propiedad')?.addEventListener('change', renderRecibos);
+  qs('#filtro-recibo-servicio')?.addEventListener('change', renderRecibos);
   qs('#btn-nuevo-recibo')?.addEventListener('click', () => openReciboModal());
   qs('#re-propiedad')?.addEventListener('change', refreshCuentasRecibo);
   qs('#re-tipo-servicio')?.addEventListener('change', refreshCuentasRecibo);
@@ -821,8 +869,9 @@ async function renderCuentas() {
   const tbody = qs('#cuentas-tbody');
   try {
     const propiedadId = qs('#filtro-cuenta-propiedad').value;
+    const tipoServicioId = qs('#filtro-cuenta-servicio')?.value ?? '';
     const [cuentas, medidores] = await Promise.all([
-      listCuentasServicio({ propiedadId }),
+      listCuentasServicio({ propiedadId, tipoServicioId }),
       listMedidores({ propiedadId }),
     ]);
     cuentasCache = cuentas;
@@ -871,6 +920,7 @@ async function eliminarCuenta(cuenta) {
 
 function bindCuentas() {
   qs('#filtro-cuenta-propiedad')?.addEventListener('change', renderCuentas);
+  qs('#filtro-cuenta-servicio')?.addEventListener('change', renderCuentas);
   qs('#btn-nueva-cuenta')?.addEventListener('click', () => openCuentaModal());
 
   const form = qs('#form-cuenta');
@@ -1074,15 +1124,7 @@ async function cargarDetalleRecibo(recibo, tipoServicio) {
     // Inquilino por sección — un contrato ya puede cubrir varias secciones
     // (ver contratos_alquiler_secciones), así que se recorren TODAS las que
     // trae cada contrato, no solo su seccion_id "principal".
-    const inquilinoPorSeccion = new Map();
-    contratos
-      .filter((c) => c.estado === 'vigente' || c.estado === 'por_vencer')
-      .forEach((c) => {
-        const idsSecciones = c.secciones_contrato?.length ? c.secciones_contrato.map((sc) => sc.seccion_id) : [c.seccion_id];
-        idsSecciones.forEach((seccionId) => {
-          if (!inquilinoPorSeccion.has(seccionId)) inquilinoPorSeccion.set(seccionId, c.inquilino?.nombre ?? '—');
-        });
-      });
+    const inquilinoPorSeccion = buildInquilinoPorSeccion(contratos);
     // Montos fijos definidos en el contrato de alquiler vigente de cada
     // sección (ej. locales de Edificio Polonia sin medidor propio) — se
     // consultan una sola vez para todas las secciones de la propiedad. Un
@@ -1229,23 +1271,37 @@ async function cargarDetalleRecibo(recibo, tipoServicio) {
       else if (nombreServicio.includes('luz') && cfg?.precio_default_luz_kwh != null) precioDefault = Number(cfg.precio_default_luz_kwh);
     }
     let precioActual = precioDefault;
+    // Columna "Precio" por medidor: cada fila puede tener su propio precio
+    // S/ por unidad (por si un medidor específico tiene una tarifa distinta
+    // a la del recibo general) — null significa "usa el precio general de
+    // arriba". Se puede ocultar/mostrar desde el menú de 3 puntos.
+    let mostrarColumnaPrecio = true;
+    filasInfo.forEach((f) => { if (f.esMedidor) f.precioOverride = null; });
 
     const tablaWrap = el('div', { class: 'table-wrap', style: 'margin-top:10px;' });
     const totalEl = el('div', { style: 'text-align:right; margin-top:8px; font-weight:600;' });
 
+    function precioDeFila(f) {
+      return f.precioOverride != null ? f.precioOverride : precioActual;
+    }
+
     function renderTabla() {
+      const NCOLS = mostrarColumnaPrecio ? 7 : 6;
       const filas = filasInfo.map((f) => {
         if (!f.ok) {
-          return el('tr', {}, [
-            el('td', {}, f.seccionNombre), el('td', {}, f.inquilinoNombre ?? '—'), el('td', {}, f.metodoLabel), el('td', {}, '—'), el('td', {}, '—'),
-            el('td', {}, el('span', { class: 'badge badge-vencida' }, 'Falta lectura del periodo')),
-          ]);
+          const celdas = [
+            el('td', {}, f.seccionNombre), el('td', {}, f.inquilinoNombre ?? '—'), el('td', {}, f.metodoLabel), el('td', {}, '—'),
+          ];
+          if (mostrarColumnaPrecio) celdas.push(el('td', {}, '—'));
+          celdas.push(el('td', {}, '—'), el('td', {}, el('span', { class: 'badge badge-vencida' }, 'Falta lectura del periodo')));
+          return el('tr', {}, celdas);
         }
         const item = f.detalleIndex != null ? detalle[f.detalleIndex] : null;
+        const precioFila = precioDeFila(f);
         const monto = f.esMedidor
-          ? Math.round(f.consumo * precioActual * 100) / 100
+          ? Math.round(f.consumo * precioFila * 100) / 100
           : Math.round((item?.n_personas ?? 0) * (item?.tarifa_por_persona ?? 0) * 100) / 100;
-        return el('tr', {}, [
+        const celdas = [
           el('td', {}, f.seccionNombre),
           el('td', {}, f.inquilinoNombre ?? '—'),
           el('td', {}, f.metodoLabel),
@@ -1258,29 +1314,69 @@ async function cargarDetalleRecibo(recibo, tipoServicio) {
             ' pers. × ',
             el('input', { type: 'number', min: '0', step: '0.01', value: String(item.tarifa_por_persona), style: 'width:80px; display:inline-block;', onchange: (evt) => { item.tarifa_por_persona = Number(evt.target.value); renderTabla(); } }),
           ])),
+        ];
+        if (mostrarColumnaPrecio) {
+          celdas.push(el('td', {}, f.esMedidor
+            ? el('input', {
+                type: 'number', min: '0', step: '0.0001', value: String(precioFila), style: 'width:90px;',
+                title: f.precioOverride != null ? 'Precio propio de este medidor (distinto al general)' : 'Usa el precio general — cámbialo para fijar uno propio de este medidor',
+                onchange: (evt) => { f.precioOverride = evt.target.value === '' ? null : Number(evt.target.value); renderTabla(); },
+              })
+            : '—'));
+        }
+        celdas.push(
           el('td', { style: 'text-align:right; font-weight:600;' }, formatCurrency(monto)),
           el('td', {}, '✓ listo'),
-        ]);
+        );
+        return el('tr', {}, celdas);
       });
+      const headers = [el('th', {}, 'Sección'), el('th', {}, 'Inquilino'), el('th', {}, 'Método'), el('th', {}, 'Consumo / detalle')];
+      if (mostrarColumnaPrecio) headers.push(el('th', {}, `Precio S/ / ${tipoServicio?.unidad_medida || 'u.'}`));
+      headers.push(el('th', {}, 'Monto'), el('th', {}, ''));
       tablaWrap.innerHTML = '';
       tablaWrap.append(el('table', { class: 'data-table' }, [
-        el('thead', {}, [el('tr', {}, [el('th', {}, 'Sección'), el('th', {}, 'Inquilino'), el('th', {}, 'Método'), el('th', {}, 'Consumo / detalle'), el('th', {}, 'Monto'), el('th', {}, '')])]),
+        el('thead', {}, [el('tr', {}, headers)]),
         el('tbody', {}, filas),
       ]));
       const totalCalc = filasInfo.filter((f) => f.ok).reduce((s, f) => {
         const item = f.detalleIndex != null ? detalle[f.detalleIndex] : null;
-        return s + (f.esMedidor ? f.consumo * precioActual : (item?.n_personas ?? 0) * (item?.tarifa_por_persona ?? 0));
+        return s + (f.esMedidor ? f.consumo * precioDeFila(f) : (item?.n_personas ?? 0) * (item?.tarifa_por_persona ?? 0));
       }, 0);
       totalEl.textContent = `Total de esta cuenta: ${formatCurrency(totalCalc)}`;
     }
 
+    // Menú "⋮" (esquina superior derecha de la tabla) para ocultar/mostrar
+    // la columna de precio por medidor sin estorbar cuando no hace falta.
+    const menuDropdown = el('div', {
+      style: 'display:none; position:absolute; right:0; top:100%; margin-top:4px; background:#fff; border:1px solid var(--gray-300); border-radius:8px; box-shadow:var(--shadow-md); z-index:20; min-width:220px;',
+    });
+    function actualizarMenuTexto() {
+      menuDropdown.innerHTML = '';
+      menuDropdown.append(el('button', {
+        type: 'button',
+        class: 'btn btn-tertiary btn-sm',
+        style: 'width:100%; justify-content:flex-start; border:none; border-radius:0;',
+        onclick: () => { mostrarColumnaPrecio = !mostrarColumnaPrecio; actualizarMenuTexto(); renderTabla(); menuDropdown.style.display = 'none'; },
+      }, mostrarColumnaPrecio ? 'Ocultar columna de precio' : 'Mostrar columna de precio'));
+    }
+    actualizarMenuTexto();
+    const menuBtn = el('button', {
+      type: 'button', class: 'btn btn-tertiary btn-sm', title: 'Opciones de la tabla',
+      style: 'padding:4px 10px; font-size:16px; line-height:1;',
+      onclick: (evt) => { evt.stopPropagation(); menuDropdown.style.display = menuDropdown.style.display === 'none' ? 'block' : 'none'; },
+    }, '⋮');
+    document.addEventListener('click', () => { menuDropdown.style.display = 'none'; });
+
     contenedorDetalle.append(
-      el('div', { style: 'display:flex; align-items:center; gap:8px; margin-bottom:4px;' }, [
-        el('label', { style: 'font-size:13px; color:var(--gray-500);' }, `Precio S/ por ${tipoServicio?.unidad_medida || 'unidad'} (editable, viene del recibo general):`),
-        el('input', {
-          type: 'number', min: '0', step: '0.0001', value: String(precioDefault), style: 'width:110px;',
-          onchange: (evt) => { precioActual = Number(evt.target.value) || 0; renderTabla(); },
-        }),
+      el('div', { style: 'display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:4px; position:relative;' }, [
+        el('div', { style: 'display:flex; align-items:center; gap:8px;' }, [
+          el('label', { style: 'font-size:13px; color:var(--gray-500);' }, `Precio S/ por ${tipoServicio?.unidad_medida || 'unidad'} (editable, viene del recibo general):`),
+          el('input', {
+            type: 'number', min: '0', step: '0.0001', value: String(precioDefault), style: 'width:110px;',
+            onchange: (evt) => { precioActual = Number(evt.target.value) || 0; renderTabla(); },
+          }),
+        ]),
+        el('div', { style: 'position:relative;' }, [menuBtn, menuDropdown]),
       ]),
       tablaWrap,
       totalEl,
@@ -1289,7 +1385,16 @@ async function cargarDetalleRecibo(recibo, tipoServicio) {
 
     if (detalle.length) {
       const btnConfirmar = el('button', { class: 'btn btn-primary btn-sm', style: 'margin-top:12px;', 'data-admin-only': '' }, 'Confirmar cálculo de esta cuenta');
-      btnConfirmar.addEventListener('click', () => confirmarCalculoRecibo(recibo, detalle, () => precioActual, btnConfirmar));
+      btnConfirmar.addEventListener('click', () => {
+        // Antes de enviar, se fija en cada ítem de medidor el precio con el
+        // que realmente se calculó su fila (propio si lo editó, general si
+        // no) — así el servidor guarda y cobra exactamente lo que se vio en
+        // la vista previa, no un precio único para toda la cuenta.
+        filasInfo.forEach((f) => {
+          if (f.esMedidor && f.detalleIndex != null) detalle[f.detalleIndex].precio_unitario = precioDeFila(f);
+        });
+        confirmarCalculoRecibo(recibo, detalle, () => precioActual, btnConfirmar);
+      });
       contenedorDetalle.append(btnConfirmar);
     }
   } catch (err) {

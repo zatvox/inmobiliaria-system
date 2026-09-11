@@ -26,6 +26,7 @@ async function main() {
 }
 
 const COLOR_LINEAS_DEFAULT = '#D1D5DB';
+const COLOR_ACENTO_REPORTES_DEFAULT = '#1B3A5C';
 
 async function cargarConfiguracion() {
   try {
@@ -39,6 +40,9 @@ async function cargarConfiguracion() {
     const colorLineas = cfg?.color_lineas_tabla || COLOR_LINEAS_DEFAULT;
     qs('#cf-color-lineas').value = colorLineas;
     qs('#cf-color-lineas-hex').value = colorLineas;
+    const colorAcentoReportes = cfg?.color_acento_reportes || COLOR_ACENTO_REPORTES_DEFAULT;
+    qs('#cf-color-acento-reportes').value = colorAcentoReportes;
+    qs('#cf-color-acento-reportes-hex').value = colorAcentoReportes;
   } catch (err) {
     console.error(err);
     showToast('No se pudo cargar la configuración del sistema.', 'error');
@@ -55,6 +59,13 @@ function bindColorLineas() {
   texto?.addEventListener('input', () => {
     if (/^#[0-9a-fA-F]{6}$/.test(texto.value)) picker.value = texto.value;
   });
+
+  const picker2 = qs('#cf-color-acento-reportes');
+  const texto2 = qs('#cf-color-acento-reportes-hex');
+  picker2?.addEventListener('input', () => { texto2.value = picker2.value; });
+  texto2?.addEventListener('input', () => {
+    if (/^#[0-9a-fA-F]{6}$/.test(texto2.value)) picker2.value = texto2.value;
+  });
 }
 
 function bindForm() {
@@ -68,6 +79,9 @@ function bindForm() {
       const colorLineas = /^#[0-9a-fA-F]{6}$/.test(qs('#cf-color-lineas-hex').value)
         ? qs('#cf-color-lineas-hex').value
         : qs('#cf-color-lineas').value;
+      const colorAcentoReportes = /^#[0-9a-fA-F]{6}$/.test(qs('#cf-color-acento-reportes-hex').value)
+        ? qs('#cf-color-acento-reportes-hex').value
+        : qs('#cf-color-acento-reportes').value;
       await updateConfiguracionSistema({
         nombre_inmobiliaria: qs('#cf-nombre-inmobiliaria').value || null,
         precio_default_agua_m3: qs('#cf-precio-agua').value ? Number(qs('#cf-precio-agua').value) : null,
@@ -76,6 +90,7 @@ function bindForm() {
         dias_gracia_mora: Number(qs('#cf-dias-gracia').value || 0),
         porcentaje_mora_mensual: Number(qs('#cf-porcentaje-mora').value || 0),
         color_lineas_tabla: colorLineas,
+        color_acento_reportes: colorAcentoReportes,
       });
       showToast('Configuración actualizada.', 'success');
     } catch (err) {

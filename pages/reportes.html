@@ -14,8 +14,10 @@
   /* Hoja de control físico: se ve como el Excel que ya usan (agrupado por
      inmueble, con columnas en blanco para llenar a mano al cobrar) y se
      imprime limpio, sin sidebar/topbar/filtros. */
-  .reporte-header-inmueble td { background: var(--gray-100); font-weight: 700; }
-  .reporte-total-row td { font-weight: 700; border-top: 2px solid var(--gray-700); }
+  .reporte-tabla td { vertical-align: top; padding-top: 10px; padding-bottom: 10px; }
+  .reporte-header-inmueble td { font-weight: 800; font-size: 15px; padding-top: 14px; padding-bottom: 8px; }
+  .reporte-subtotal-inmueble td { font-weight: 700; border-top: 1px dashed var(--gray-300); padding-top: 8px; padding-bottom: 14px; }
+  .reporte-total-row td { font-weight: 700; border-top: 2px solid var(--gray-700); background: var(--gray-100); }
   @media print {
     .sidebar, .topbar, .no-print { display: none !important; }
     .main-area { margin-left: 0 !important; }

@@ -68,8 +68,10 @@
 
         <!-- ================================ MEDIDORES ================================ -->
         <div class="tab-panel" id="panel-medidores">
-          <div class="page-header" style="margin-bottom:12px;">
-            <select id="filtro-medidor-propiedad" class="select-propiedad" style="max-width:280px;"></select>
+          <div id="medidor-propiedad-tabs" style="display:flex; gap:6px; flex-wrap:wrap; margin-bottom:10px;"></div>
+          <select id="filtro-medidor-propiedad" class="select-propiedad" style="display:none;"></select>
+          <div class="page-header" style="margin-bottom:12px; flex-wrap:wrap; gap:10px;">
+            <select id="filtro-medidor-servicio" style="max-width:180px;"><option value="">Todos los servicios</option></select>
             <button class="btn btn-primary" id="btn-nuevo-medidor" data-admin-only>+ Nuevo medidor</button>
           </div>
           <div class="table-wrap">
@@ -84,35 +86,34 @@
         <div class="tab-panel" id="panel-lecturas" style="display:none;">
           <div id="lectura-propiedad-tabs" style="display:flex; gap:6px; flex-wrap:wrap; margin-bottom:10px;"></div>
           <select id="filtro-lectura-propiedad" class="select-propiedad" style="display:none;"></select>
-          <div class="page-header" style="margin-bottom:12px; flex-wrap:wrap; gap:10px;">
-            <div style="display:flex; gap:10px; flex-wrap:wrap;">
-              <select id="filtro-lectura-servicio" style="max-width:180px;"><option value="">Todos los servicios</option></select>
-              <select id="filtro-lectura-medidor" style="max-width:280px;"><option value="">Todos los medidores</option></select>
-              <input type="month" id="filtro-lectura-periodo" style="max-width:160px;" />
-            </div>
-            <div style="display:flex; gap:8px;">
-              <button type="button" class="btn btn-tertiary" id="btn-ver-cuadro">▦ Ver como cuadro</button>
-              <button class="btn btn-primary" id="btn-nueva-lectura" data-admin-only>+ Registrar lectura</button>
-            </div>
+          <div class="page-header" style="margin-bottom:12px; flex-wrap:wrap; gap:10px; align-items:center;">
+            <select id="filtro-lectura-servicio" style="max-width:180px;"><option value="">Todos los servicios</option></select>
+            <select id="filtro-lectura-medidor" style="max-width:280px;"><option value="">Todos los medidores</option></select>
+            <input type="month" id="filtro-lectura-periodo" style="max-width:160px;" />
+            <div style="flex:1 0 0; min-width:8px;"></div>
+            <button type="button" class="btn btn-tertiary" id="btn-ver-cuadro">☰ Ver como lista</button>
+            <button class="btn btn-primary" id="btn-nueva-lectura" data-admin-only>+ Registrar lectura</button>
           </div>
           <div style="display:flex; gap:14px; align-items:center; font-size:12px; color:var(--gray-500); margin-bottom:8px;">
             <span><span style="display:inline-block; width:10px; height:10px; border-radius:2px; background:#3B82F6; vertical-align:middle; margin-right:4px;"></span>Agua</span>
             <span><span style="display:inline-block; width:10px; height:10px; border-radius:2px; background:#F59E0B; vertical-align:middle; margin-right:4px;"></span>Luz</span>
           </div>
           <div id="lecturas-pendientes" style="display:none;"></div>
-          <div class="table-wrap" id="lecturas-vista-lista">
+          <div class="table-wrap" id="lecturas-vista-lista" style="display:none;">
             <table class="data-table">
               <thead><tr><th>Medidor</th><th>Código</th><th>Inquilino actual</th><th>Servicio</th><th>Fecha ant.</th><th>Lect. ant.</th><th>Fecha act.</th><th>Lect. act.</th><th>Consumo</th><th></th></tr></thead>
               <tbody id="lecturas-tbody"><tr><td colspan="10"><div class="skeleton" style="height:20px;"></div></td></tr></tbody>
             </table>
           </div>
-          <div class="table-wrap" id="lecturas-vista-cuadro" style="display:none;"></div>
+          <div class="table-wrap" id="lecturas-vista-cuadro"></div>
         </div>
 
         <!-- ============================== RECIBOS GENERALES ============================== -->
         <div class="tab-panel" id="panel-recibos" style="display:none;">
-          <div class="page-header" style="margin-bottom:12px;">
-            <select id="filtro-recibo-propiedad" class="select-propiedad" style="max-width:280px;"></select>
+          <div id="recibo-propiedad-tabs" style="display:flex; gap:6px; flex-wrap:wrap; margin-bottom:10px;"></div>
+          <select id="filtro-recibo-propiedad" class="select-propiedad" style="display:none;"></select>
+          <div class="page-header" style="margin-bottom:12px; flex-wrap:wrap; gap:10px;">
+            <select id="filtro-recibo-servicio" style="max-width:180px;"><option value="">Todos los servicios</option></select>
             <button class="btn btn-primary" id="btn-nuevo-recibo" data-admin-only>+ Registrar recibo</button>
           </div>
           <div class="table-wrap">
@@ -125,8 +126,10 @@
 
         <!-- ============================= CUENTAS DE SERVICIO ============================== -->
         <div class="tab-panel" id="panel-cuentas" style="display:none;">
-          <div class="page-header" style="margin-bottom:12px;">
-            <select id="filtro-cuenta-propiedad" class="select-propiedad" style="max-width:280px;"></select>
+          <div id="cuenta-propiedad-tabs" style="display:flex; gap:6px; flex-wrap:wrap; margin-bottom:10px;"></div>
+          <select id="filtro-cuenta-propiedad" class="select-propiedad" style="display:none;"></select>
+          <div class="page-header" style="margin-bottom:12px; flex-wrap:wrap; gap:10px;">
+            <select id="filtro-cuenta-servicio" style="max-width:180px;"><option value="">Todos los servicios</option></select>
             <button class="btn btn-primary" id="btn-nueva-cuenta" data-admin-only>+ Nueva cuenta</button>
           </div>
           <p class="subtitle" style="margin-bottom:12px;">Solo hace falta crear cuentas aquí si una propiedad tiene <strong>varias</strong> conexiones/recibos independientes del mismo servicio (ej. varias cuentas de agua). Si una propiedad tiene una sola cuenta por servicio, no necesitas nada de esta pestaña.</p>
@@ -246,8 +249,14 @@
               <div class="hint">Filtra la lista de medidores de abajo.</div>
             </div>
             <div class="form-field">
+              <label for="le-servicio">Tipo de servicio</label>
+              <select id="le-servicio"><option value="">Todos los servicios</option></select>
+              <div class="hint">Filtra la lista de medidores de abajo.</div>
+            </div>
+            <div class="form-field full">
               <label for="le-medidor">Medidor *</label>
               <select id="le-medidor" required><option value="">Selecciona…</option></select>
+              <div class="hint">Se muestra el inquilino actual (por contrato), la sección y el código de cada medidor.</div>
             </div>
             <div class="form-field">
               <label for="le-fecha-anterior">Fecha lectura anterior</label>

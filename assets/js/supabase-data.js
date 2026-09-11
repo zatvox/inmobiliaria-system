@@ -488,7 +488,7 @@ export async function listCuotasServicioParaReporte({ periodo, tipoServicioId = 
   if (!periodo) return [];
   let query = supabase
     .from('cuotas')
-    .select('id, calculo_servicio_detalle_id, concepto, monto, mora_aplicada, fecha_vencimiento, estado, pagos(id, monto, estado)')
+    .select('id, calculo_servicio_detalle_id, concepto, monto, mora_aplicada, fecha_vencimiento, estado, pagos(id, monto, fecha_pago, medio_pago, n_operacion, estado)')
     .eq('origen', 'servicio')
     .order('fecha_vencimiento', { ascending: true });
   if (soloPendientes) query = query.neq('estado', 'anulada');
@@ -520,8 +520,16 @@ export async function listCuotasServicioParaReporte({ periodo, tipoServicioId = 
     .filter((c) => idsValidos.has(c.calculo_servicio_detalle_id))
     .map((c) => {
       const d = mapDetalle.get(c.calculo_servicio_detalle_id);
-      const totalPagado = (c.pagos ?? []).filter((p) => p.estado !== 'anulado').reduce((s, p) => s + Number(p.monto), 0);
-      const saldo = Number(c.monto) + Number(c.mora_aplicada) - totalPagado;
+      // Una cuota puede tener varios pagos (cobro parcial en distintas
+      // fechas) — se listan todos los no anulados, ordenados por fecha, así
+      // el reporte puede mostrar "Fch. pago" y "Recibo/método" con más de
+      // un valor cuando corresponda.
+      const pagosValidos = (c.pagos ?? [])
+        .filter((p) => p.estado !== 'anulado')
+        .sort((a, b) => (a.fecha_pago ?? '').localeCompare(b.fecha_pago ?? ''));
+      const totalPagado = pagosValidos.reduce((s, p) => s + Number(p.monto), 0);
+      const importeTotal = Number(c.monto) + Number(c.mora_aplicada);
+      const saldo = importeTotal - totalPagado;
       return {
         id: c.id,
         propiedadId: d?.seccion?.propiedad_id ?? d?.calculo_periodo?.propiedad_id ?? null,
@@ -532,10 +540,17 @@ export async function listCuotasServicioParaReporte({ periodo, tipoServicioId = 
         concepto: c.concepto,
         monto: Number(c.monto),
         moraAplicada: Number(c.mora_aplicada),
+        importeTotal,
         totalPagado,
         saldo,
         estado: c.estado,
         fechaVencimiento: c.fecha_vencimiento,
+        pagos: pagosValidos.map((p) => ({
+          monto: Number(p.monto),
+          fechaPago: p.fecha_pago,
+          medioPago: p.medio_pago,
+          nOperacion: p.n_operacion,
+        })),
       };
     })
     .filter((r) => !soloPendientes || r.saldo > 0.009);
@@ -726,12 +741,13 @@ export async function deleteLectura(id) {
   if (error) throw error;
 }
 
-export async function listRecibosGenerales({ propiedadId = '' } = {}) {
+export async function listRecibosGenerales({ propiedadId = '', tipoServicioId = '' } = {}) {
   let query = supabase
     .from('recibos_generales_servicio')
     .select('*, propiedad:propiedad_id(nombre_referencial), tipo_servicio:tipo_servicio_id(nombre), cuenta_servicio:cuenta_servicio_id(id, codigo, nombre)')
     .order('periodo', { ascending: false });
   if (propiedadId) query = query.eq('propiedad_id', propiedadId);
+  if (tipoServicioId) query = query.eq('tipo_servicio_id', tipoServicioId);
   const { data, error } = await query;
   if (error) throw error;
   return data;

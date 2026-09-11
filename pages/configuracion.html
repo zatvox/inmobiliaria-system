@@ -112,6 +112,21 @@
                 <span class="hint">Por defecto es gris. Cambia también el color del selector de texto si prefieres escribir el código directamente.</span>
               </div>
             </div>
+
+            <div class="card-title" style="font-size:15px; margin-top:8px;">Estilo del reporte de cuotas por cobrar</div>
+            <p style="color:var(--gray-500); margin-bottom:16px;">
+              Color del acento que conecta visualmente el nombre de cada inmueble con sus filas de detalle en Reportes.
+            </p>
+            <div class="form-grid">
+              <div class="form-field">
+                <label for="cf-color-acento-reportes">Color de acento por inmueble</label>
+                <div style="display:flex; align-items:center; gap:10px;">
+                  <input type="color" id="cf-color-acento-reportes" style="width:56px; height:38px; padding:2px; cursor:pointer;" />
+                  <input type="text" id="cf-color-acento-reportes-hex" placeholder="#1B3A5C" style="max-width:120px;" />
+                </div>
+                <span class="hint">Por defecto es el azul de la marca.</span>
+              </div>
+            </div>
             <button type="submit" class="btn btn-primary" id="btn-guardar-configuracion" data-admin-only>Guardar cambios</button>
           </form>
         </div>
