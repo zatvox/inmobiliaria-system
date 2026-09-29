@@ -8,7 +8,7 @@ import { isAdmin } from './auth.js';
 import {
   listCuotas, getCuota, aplicarMoraVencidas, registrarPago, verificarPago, anularPago, anularCuota,
   uploadArchivo, getSignedUrl, getCatalogo, listComisionesAgentes, marcarComisionPagada,
-  listDetalleCalculoPorCuota, eliminarCuotaServicio,
+  listDetalleCalculoPorCuota, eliminarCuotaServicio, listPropiedades, listTiposServicio,
 } from './supabase-data.js';
 import { qs, qsa, el, formatCurrency, formatDate, badgeHtml, showToast, openModal, closeModal, validateForm, setLoading, confirmAction, debounce } from './utils.js';
 import { agruparDetalleParaCuadro, buildCuadroConsumoEl, descargarCuadroComoImagen, getColorLineasTabla } from './cuadro-consumo.js';
@@ -16,17 +16,62 @@ import { agruparDetalleParaCuadro, buildCuadroConsumoEl, descargarCuadroComoImag
 let profile = null;
 let activeOrigen = '';
 let cuotasCache = [];
+let propiedadesCache = [];
+let tiposServicioCache = [];
 
 const ORIGEN_LABELS = { alquiler: 'Alquiler', venta: 'Venta', servicio: 'Servicio' };
+
+function periodoActual() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+}
 
 async function main() {
   profile = await initShell('cobranzas');
   if (!profile) return;
 
+  qs('#filter-periodo').value = periodoActual();
+
+  [propiedadesCache, tiposServicioCache] = await Promise.all([listPropiedades(), listTiposServicio()]);
+  fillEdificioYServicioSelects();
+  await fillInquilinoSelect();
+
   bindTabs();
   bindToolbar();
   bindFormPago();
   await Promise.all([refresh(), renderComisiones()]);
+}
+
+function fillEdificioYServicioSelects() {
+  const selEdificio = qs('#filter-edificio');
+  if (selEdificio) {
+    selEdificio.innerHTML = '<option value="">Todos los edificios</option>';
+    propiedadesCache.forEach((p) => selEdificio.append(el('option', { value: p.id }, p.nombre_referencial)));
+  }
+  const selServicio = qs('#filter-servicio');
+  if (selServicio) {
+    selServicio.innerHTML = '<option value="">Todos los servicios</option>';
+    tiposServicioCache.forEach((t) => selServicio.append(el('option', { value: t.id }, t.nombre)));
+  }
+}
+
+// Lista de deudores (inquilinos/compradores) con al menos una cuota, para el
+// select "Todos los inquilinos". Se calcula una sola vez sobre el universo
+// completo de cuotas (sin aplicar los demás filtros) para que la lista no se
+// vaya vaciando a medida que el usuario filtra por otro lado.
+async function fillInquilinoSelect() {
+  const select = qs('#filter-inquilino');
+  if (!select) return;
+  const currentValue = select.value;
+  try {
+    const todas = await listCuotas({});
+    const nombres = [...new Set(todas.map((c) => c.deudor).filter((d) => d && d !== '—'))].sort((a, b) => a.localeCompare(b));
+    select.innerHTML = '<option value="">Todos los inquilinos</option>';
+    nombres.forEach((n) => select.append(el('option', { value: n }, n)));
+    if (nombres.includes(currentValue)) select.value = currentValue;
+  } catch (err) {
+    console.error(err);
+  }
 }
 
 function bindTabs() {
@@ -42,6 +87,10 @@ function bindTabs() {
 function bindToolbar() {
   qs('#search-input')?.addEventListener('input', debounce(refresh, 350));
   qs('#filter-estado')?.addEventListener('change', refresh);
+  qs('#filter-inquilino')?.addEventListener('change', refresh);
+  qs('#filter-edificio')?.addEventListener('change', refresh);
+  qs('#filter-servicio')?.addEventListener('change', refresh);
+  qs('#filter-periodo')?.addEventListener('change', refresh);
   qs('#btn-actualizar-vencidas')?.addEventListener('click', async () => {
     const btn = qs('#btn-actualizar-vencidas');
     setLoading(btn, true, 'Actualizando…');
@@ -59,12 +108,26 @@ function bindToolbar() {
 }
 
 async function refresh() {
-  const search = qs('#search-input')?.value ?? '';
-  const estado = qs('#filter-estado')?.value ?? '';
+  const filtros = {
+    origen: activeOrigen,
+    estado: qs('#filter-estado')?.value ?? '',
+    search: qs('#search-input')?.value ?? '',
+    propiedadId: qs('#filter-edificio')?.value ?? '',
+    tipoServicioId: qs('#filter-servicio')?.value ?? '',
+    deudor: qs('#filter-inquilino')?.value ?? '',
+    periodo: qs('#filter-periodo')?.value ?? '',
+  };
   const tbody = qs('#cuotas-tbody');
   try {
-    cuotasCache = await listCuotas({ origen: activeOrigen, estado, search });
-    renderKpis(cuotasCache);
+    // Los KPIs se calculan sobre TODO el histórico de la pestaña activa (no
+    // solo el mes filtrado en la tabla) — "Vencido (total)" en particular
+    // dejaría de ser un total real si se acotara al periodo seleccionado.
+    const [paraTabla, paraKpis] = await Promise.all([
+      listCuotas(filtros),
+      listCuotas({ origen: activeOrigen }),
+    ]);
+    cuotasCache = paraTabla;
+    renderKpis(paraKpis);
     tbody.innerHTML = '';
     if (!cuotasCache.length) {
       tbody.append(el('tr', {}, [el('td', { colspan: '8' }, [

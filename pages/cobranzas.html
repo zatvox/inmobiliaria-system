@@ -58,10 +58,6 @@
       </header>
 
       <main class="content">
-        <div class="page-header" style="justify-content:flex-end;">
-          <button class="btn btn-secondary" id="btn-actualizar-vencidas" data-admin-only>Actualizar vencidas</button>
-        </div>
-
         <div class="kpi-grid" style="margin-bottom:20px;">
           <div class="kpi-card"><div class="kpi-label">Pendiente este mes</div><div class="kpi-value" id="kpi-pendiente">—</div></div>
           <div class="kpi-card"><div class="kpi-label">Vencido (total)</div><div class="kpi-value" id="kpi-vencido" style="color:var(--color-danger);">—</div></div>
@@ -75,9 +71,13 @@
           <button class="tab-btn" data-tab="servicio">Servicios</button>
         </div>
 
-        <div style="display:flex; gap:12px; margin-bottom:16px; flex-wrap:wrap;">
-          <input type="text" id="search-input" placeholder="Buscar por nombre, sección o propiedad…" style="max-width:320px;" />
-          <select id="filter-estado" style="max-width:200px;">
+        <div style="display:flex; gap:12px; margin-bottom:16px; flex-wrap:wrap; align-items:center;">
+          <input type="text" id="search-input" placeholder="Buscar por nombre, sección o propiedad…" style="max-width:260px;" />
+          <select id="filter-inquilino" style="max-width:200px;"><option value="">Todos los inquilinos</option></select>
+          <select id="filter-edificio" style="max-width:200px;"><option value="">Todos los edificios</option></select>
+          <select id="filter-servicio" style="max-width:180px;"><option value="">Todos los servicios</option></select>
+          <input type="month" id="filter-periodo" style="max-width:160px;" title="Mes de vencimiento" />
+          <select id="filter-estado" style="max-width:180px;">
             <option value="">Todos los estados</option>
             <option value="pendiente">Pendiente</option>
             <option value="parcial">Parcial</option>
@@ -85,6 +85,8 @@
             <option value="vencida">Vencida</option>
             <option value="anulada">Anulada</option>
           </select>
+          <div style="flex:1 0 0; min-width:8px;"></div>
+          <button class="btn btn-secondary" id="btn-actualizar-vencidas" data-admin-only>Actualizar vencidas</button>
         </div>
 
         <div class="table-wrap">

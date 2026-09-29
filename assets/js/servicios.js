@@ -24,6 +24,20 @@ let tiposServicioCache = [];
 let cuentasCache = [];
 let configuracionCache = null;
 let vistaLecturas = 'cuadro'; // 'lista' | 'cuadro' — por defecto cuadro (más rápido de leer)
+let lecturaPropiedadPreseleccionada = false;
+
+// La primera vez que se entra a "Lecturas del mes" se preselecciona el
+// inmueble de Santa Rosa de Lima (el que más se revisa a diario) para no
+// obligar a elegirlo cada vez — pero solo una vez por sesión y solo si el
+// usuario no había elegido ya otra cosa, para no pisarle la selección.
+function preseleccionarPropiedadLecturas() {
+  if (lecturaPropiedadPreseleccionada) return;
+  lecturaPropiedadPreseleccionada = true;
+  const sel = qs('#filtro-lectura-propiedad');
+  if (!sel || sel.value) return;
+  const propDefault = propiedadesCache.find((p) => (p.nombre_referencial || '').toLowerCase().includes('santa rosa de lima'));
+  if (propDefault) sel.value = propDefault.id;
+}
 
 function periodoActual() {
   const d = new Date();
@@ -92,8 +106,10 @@ function bindTabs() {
       qsa('.tab-panel').forEach((p) => { p.style.display = p.id === `panel-${activeTab}` ? 'block' : 'none'; });
       if (activeTab === 'medidores') { renderPropiedadTabs('#medidor-propiedad-tabs', '#filtro-medidor-propiedad', renderMedidores); await renderMedidores(); }
       if (activeTab === 'lecturas') {
-        renderPropiedadTabs('#lectura-propiedad-tabs', '#filtro-lectura-propiedad', async () => { await fillMedidorSelect(); await renderLecturas(); });
+        preseleccionarPropiedadLecturas();
+        renderPropiedadTabs('#lectura-propiedad-tabs', '#filtro-lectura-propiedad', async () => { await fillMedidorSelect(); await fillInquilinoSelect(); await renderLecturas(); });
         await fillMedidorSelect();
+        await fillInquilinoSelect();
         await renderLecturas();
       }
       if (activeTab === 'recibos') { renderPropiedadTabs('#recibo-propiedad-tabs', '#filtro-recibo-propiedad', renderRecibos); await renderRecibos(); }
@@ -396,16 +412,20 @@ async function renderLecturasLista() {
   const propiedadId = qs('#filtro-lectura-propiedad').value;
   const periodo = qs('#filtro-lectura-periodo').value;
   const tipoServicioId = qs('#filtro-lectura-servicio')?.value ?? '';
+  const filtroInquilino = qs('#filtro-lectura-inquilino')?.value ?? '';
   try {
-    const [lecturas, contratos] = await Promise.all([
+    const [lecturasTodas, contratos] = await Promise.all([
       listLecturas({ propiedadId, medidorId: qs('#filtro-lectura-medidor').value, periodo, tipoServicioId }),
       listContratosAlquiler({}),
     ]);
     // Igual que en Medidores: un contrato puede cubrir varias secciones, hay
     // que recorrer todas (contratos_alquiler_secciones), no solo la principal.
     const inquilinoPorSeccion = buildInquilinoPorSeccion(contratos);
+    const lecturas = filtroInquilino
+      ? lecturasTodas.filter((l) => l.medidor && medidorCoincideInquilino(l.medidor, inquilinoPorSeccion, filtroInquilino))
+      : lecturasTodas;
 
-    await renderLecturasPendientes(propiedadId, periodo, lecturas, tipoServicioId);
+    await renderLecturasPendientes(propiedadId, periodo, lecturasTodas, tipoServicioId);
 
     tbody.innerHTML = '';
     if (!lecturas.length) {
@@ -413,13 +433,7 @@ async function renderLecturasLista() {
       return;
     }
     lecturas.forEach((l) => {
-      let inquilino = '—';
-      if (l.medidor?.es_compartido) {
-        const nombres = (l.medidor.medidores_reparto ?? []).map((r) => inquilinoPorSeccion.get(r.seccion_id)).filter(Boolean);
-        inquilino = nombres.length ? [...new Set(nombres)].join(' / ') : '—';
-      } else if (!l.medidor?.es_general && l.medidor?.seccion_id) {
-        inquilino = inquilinoPorSeccion.get(l.medidor.seccion_id) ?? '—';
-      }
+      const inquilino = l.medidor?.es_general ? 'Medidor general' : (inquilinoDeMedidor(l.medidor ?? {}, inquilinoPorSeccion) ?? '—');
       tbody.append(el('tr', { style: `border-left:4px solid ${colorServicio(l.medidor?.tipo_servicio?.nombre)};` }, [
         el('td', {}, `${l.medidor?.propiedad?.nombre_referencial ?? ''} ${l.medidor?.seccion?.nombre ? '· ' + l.medidor.seccion.nombre : '(general)'}`),
         el('td', {}, l.medidor?.codigo_medidor || '—'),
@@ -487,15 +501,21 @@ async function renderLecturasCuadro() {
   }
   cont.innerHTML = '<div class="skeleton" style="height:120px;"></div>';
   const tipoServicioId = qs('#filtro-lectura-servicio')?.value ?? '';
+  const filtroInquilino = qs('#filtro-lectura-inquilino')?.value ?? '';
   try {
-    const [medidoresTodos, lecturas] = await Promise.all([
+    const [medidoresTodos, lecturas, contratos] = await Promise.all([
       listMedidores({ propiedadId }),
       listLecturas({ propiedadId, tipoServicioId }),
+      listContratosAlquiler({}),
     ]);
-    const medidores = tipoServicioId ? medidoresTodos.filter((m) => m.tipo_servicio_id === tipoServicioId) : medidoresTodos;
+    const inquilinoPorSeccion = buildInquilinoPorSeccion(contratos);
+    let medidores = tipoServicioId ? medidoresTodos.filter((m) => m.tipo_servicio_id === tipoServicioId) : medidoresTodos;
+    if (filtroInquilino) medidores = medidores.filter((m) => medidorCoincideInquilino(m, inquilinoPorSeccion, filtroInquilino));
     if (!medidores.length) {
       cont.innerHTML = '';
-      cont.append(el('p', { style: 'color:var(--gray-500); padding:16px;' }, 'Esta propiedad todavía no tiene medidores registrados.'));
+      cont.append(el('p', { style: 'color:var(--gray-500); padding:16px;' }, filtroInquilino
+        ? 'Ningún medidor de esta propiedad corresponde a ese inquilino.'
+        : 'Esta propiedad todavía no tiene medidores registrados.'));
       return;
     }
     const medidoresOrdenados = [...medidores].sort((a, b) => (a.seccion?.nombre ?? '').localeCompare(b.seccion?.nombre ?? '') || (a.codigo_medidor ?? '').localeCompare(b.codigo_medidor ?? ''));
@@ -512,15 +532,23 @@ async function renderLecturasCuadro() {
       cont.append(el('p', { style: 'color:var(--gray-500); padding:16px;' }, 'Esta propiedad todavía no tiene lecturas registradas.'));
       return;
     }
+    // Cabecera de 3 líneas por medidor: sección/medidor arriba, inquilino
+    // actual al medio (el dato que más se busca a simple vista), código
+    // técnico abajo en gris — así no hay que abrir cada columna para saber
+    // de quién es.
     const thead = el('thead', {}, [el('tr', {}, [
       el('th', { style: 'position:sticky; left:0; background:var(--gray-100); z-index:1;' }, 'Fecha'),
-      ...medidoresOrdenados.map((m) => el('th', {
-        style: `background:${colorServicio(m.tipo_servicio?.nombre)}22; border-bottom:3px solid ${colorServicio(m.tipo_servicio?.nombre)}; text-align:right; white-space:nowrap;`,
-        title: m.tipo_servicio?.nombre ?? '',
-      }, [
-        el('div', {}, m.seccion?.nombre ? m.seccion.nombre : (m.es_general ? '(general)' : '(compartido)')),
-        el('div', { style: 'font-weight:400; font-size:11px; color:var(--gray-500);' }, m.codigo_medidor || '—'),
-      ])),
+      ...medidoresOrdenados.map((m) => {
+        const inquilino = m.es_general ? 'Medidor general' : inquilinoDeMedidor(m, inquilinoPorSeccion);
+        return el('th', {
+          style: `background:${colorServicio(m.tipo_servicio?.nombre)}22; border-bottom:3px solid ${colorServicio(m.tipo_servicio?.nombre)}; text-align:right; white-space:nowrap; vertical-align:bottom;`,
+          title: [m.tipo_servicio?.nombre, inquilino].filter(Boolean).join(' · '),
+        }, [
+          el('div', { style: 'font-weight:700; font-size:12px; color:var(--gray-800);' }, m.seccion?.nombre ? m.seccion.nombre : (m.es_general ? '(general)' : '(compartido)')),
+          inquilino ? el('div', { style: 'font-weight:600; font-size:11px; color:var(--color-primary); max-width:150px; overflow:hidden; text-overflow:ellipsis; margin-top:1px;' }, inquilino) : null,
+          el('div', { style: 'font-weight:400; font-size:10px; color:var(--gray-500); margin-top:2px;' }, m.codigo_medidor || '—'),
+        ]);
+      }),
     ])]);
     const tbody = el('tbody', {}, fechasOrdenadas.map((fecha) => el('tr', {}, [
       el('td', { style: 'position:sticky; left:0; background:#fff; font-weight:600; white-space:nowrap;' }, formatDate(fecha)),
@@ -562,18 +590,32 @@ function medidorLabel(m, { conPropiedad = false, inquilinoPorSeccion = null, inc
   let label = parts.filter(Boolean).join(' · ');
   if (m.codigo_medidor) label += (incluirServicio ? ' · Cód. ' : ' - Cód. ') + m.codigo_medidor;
   if (inquilinoPorSeccion) {
-    let inquilino = '—';
-    if (m.es_compartido) {
-      const nombres = (m.medidores_reparto ?? []).map((r) => inquilinoPorSeccion.get(r.seccion_id)).filter(Boolean);
-      inquilino = nombres.length ? [...new Set(nombres)].join(' / ') : '—';
-    } else if (!m.es_general && m.seccion_id) {
-      inquilino = inquilinoPorSeccion.get(m.seccion_id) ?? '—';
-    } else if (m.es_general) {
-      inquilino = 'Medidor general';
-    }
+    const inquilino = m.es_general ? 'Medidor general' : (inquilinoDeMedidor(m, inquilinoPorSeccion) ?? '—');
     label = `${inquilino} — ${label}`;
   }
   return label;
+}
+
+// Nombre(s) del inquilino asociado a un medidor, o null si es un medidor
+// general o si su sección no tiene contrato vigente/por_vencer. En
+// medidores compartidos devuelve los nombres únicos separados por ' / ' —
+// usado tanto para mostrar (cabecera del cuadro, lista) como para filtrar
+// por inquilino (se compara nombre por nombre contra el string dividido).
+function inquilinoDeMedidor(m, inquilinoPorSeccion) {
+  if (m.es_general) return null;
+  if (m.es_compartido) {
+    const nombres = (m.medidores_reparto ?? []).map((r) => inquilinoPorSeccion.get(r.seccion_id)).filter(Boolean);
+    return nombres.length ? [...new Set(nombres)].join(' / ') : null;
+  }
+  if (m.seccion_id) return inquilinoPorSeccion.get(m.seccion_id) ?? null;
+  return null;
+}
+
+function medidorCoincideInquilino(m, inquilinoPorSeccion, filtroInquilino) {
+  if (!filtroInquilino) return true;
+  const nombre = inquilinoDeMedidor(m, inquilinoPorSeccion);
+  if (!nombre) return false;
+  return nombre.split(' / ').includes(filtroInquilino);
 }
 
 // Construye el mapa sección → inquilino actual (contrato vigente/por_vencer
@@ -615,6 +657,34 @@ async function fillMedidorSelect() {
   if (medidores.some((m) => m.id === currentValue)) select.value = currentValue;
 }
 
+// Lista de inquilinos con medidor en la propiedad filtrada, para el select
+// "Todos los inquilinos" de Lecturas del mes. Se recalcula cada vez que
+// cambia la propiedad (mismo patrón que fillMedidorSelect).
+async function fillInquilinoSelect() {
+  const propiedadId = qs('#filtro-lectura-propiedad')?.value ?? '';
+  const select = qs('#filtro-lectura-inquilino');
+  if (!select) return;
+  const currentValue = select.value;
+  try {
+    const [medidores, contratos] = await Promise.all([
+      listMedidores({ propiedadId }),
+      listContratosAlquiler({}),
+    ]);
+    const inquilinoPorSeccion = buildInquilinoPorSeccion(contratos);
+    const nombres = new Set();
+    medidores.forEach((m) => {
+      const nombre = inquilinoDeMedidor(m, inquilinoPorSeccion);
+      if (nombre) nombre.split(' / ').forEach((n) => nombres.add(n));
+    });
+    const ordenados = [...nombres].sort((a, b) => a.localeCompare(b));
+    select.innerHTML = '<option value="">Todos los inquilinos</option>';
+    ordenados.forEach((n) => select.append(el('option', { value: n }, n)));
+    if (ordenados.includes(currentValue)) select.value = currentValue;
+  } catch (err) {
+    console.error(err);
+  }
+}
+
 async function fillLecturaMedidorSelect() {
   const propiedadId = qs('#le-propiedad')?.value ?? '';
   const tipoServicioId = qs('#le-servicio')?.value ?? '';
@@ -640,8 +710,9 @@ async function fillLecturaMedidorSelect() {
 }
 
 function bindLecturas() {
-  qs('#filtro-lectura-propiedad')?.addEventListener('change', async () => { await fillMedidorSelect(); await renderLecturas(); });
+  qs('#filtro-lectura-propiedad')?.addEventListener('change', async () => { await fillMedidorSelect(); await fillInquilinoSelect(); await renderLecturas(); });
   qs('#filtro-lectura-servicio')?.addEventListener('change', async () => { await fillMedidorSelect(); await renderLecturas(); });
+  qs('#filtro-lectura-inquilino')?.addEventListener('change', renderLecturas);
   qs('#filtro-lectura-medidor')?.addEventListener('change', renderLecturas);
   qs('#filtro-lectura-periodo')?.addEventListener('change', renderLecturas);
   qs('#btn-nueva-lectura')?.addEventListener('click', () => openLecturaModal());
@@ -1014,7 +1085,7 @@ async function buscarRecibosCalculo() {
       const yaCalculado = calculadosIds.has(recibo.id);
       const card = el('div', { class: 'card', style: 'margin-bottom:12px;' }, [
         el('p', { style: 'margin-bottom:8px;' }, [
-          el('strong', {}, recibo.cuenta_servicio ? `Cuenta ${recibo.cuenta_servicio.codigo}${recibo.cuenta_servicio.nombre ? ' · ' + recibo.cuenta_servicio.nombre : ''}` : 'Cuenta única de la propiedad'),
+          el('strong', {}, recibo.cuenta_servicio ? `Cuenta ${recibo.cuenta_servicio.codigo}${recibo.cuenta_servicio.nombre && recibo.cuenta_servicio.nombre !== recibo.cuenta_servicio.codigo ? ' · ' + recibo.cuenta_servicio.nombre : ''}` : 'Cuenta única de la propiedad'),
           ` — ${formatCurrency(recibo.monto_total_recibo)}${recibo.precio_unitario ? ' · precio unit. ' + formatNumber(recibo.precio_unitario, 4) : ''}`,
         ]),
       ]);
@@ -1256,19 +1327,31 @@ async function cargarDetalleRecibo(recibo, tipoServicio) {
       return;
     }
 
-    // El precio unitario por defecto viene del recibo general (mismo cálculo
-    // que hace el RPC en el servidor); si el recibo no trae precio propio ni
-    // consumo total para derivarlo, se usa el precio por defecto de
-    // Configuración (S/ por m3 de agua o kWh de luz) como último recurso.
-    // El usuario puede corregirlo siempre antes de confirmar.
-    let precioDefault = recibo.precio_unitario != null
+    // El precio unitario se calcula del recibo general (mismo cálculo que
+    // hace el RPC en el servidor), pero NUNCA se cobra por debajo del precio
+    // por defecto configurado en ⚙️ Configuración — ese valor es un piso
+    // mínimo (ej. si el recibo sale más barato ese mes, igual se respeta la
+    // tarifa mínima pactada). Siempre se usa el MAYOR de los dos, y se avisa
+    // cuál de los dos ganó para que quede claro por qué se ve ese número.
+    const precioRecibo = recibo.precio_unitario != null
       ? Number(recibo.precio_unitario)
       : (Number(recibo.consumo_total_recibo) > 0 ? Math.round((recibo.monto_total_recibo / recibo.consumo_total_recibo) * 10000) / 10000 : 0);
-    if (!precioDefault) {
-      const cfg = await getConfiguracionCacheada();
-      const nombreServicio = (tipoServicio?.nombre ?? '').toLowerCase();
-      if (nombreServicio.includes('agua') && cfg?.precio_default_agua_m3 != null) precioDefault = Number(cfg.precio_default_agua_m3);
-      else if (nombreServicio.includes('luz') && cfg?.precio_default_luz_kwh != null) precioDefault = Number(cfg.precio_default_luz_kwh);
+    const cfg = await getConfiguracionCacheada();
+    const nombreServicio = (tipoServicio?.nombre ?? '').toLowerCase();
+    let precioConfig = null;
+    if (nombreServicio.includes('agua') && cfg?.precio_default_agua_m3 != null) precioConfig = Number(cfg.precio_default_agua_m3);
+    else if (nombreServicio.includes('luz') && cfg?.precio_default_luz_kwh != null) precioConfig = Number(cfg.precio_default_luz_kwh);
+
+    let precioDefault, origenPrecio; // origenPrecio: 'recibo' | 'config'
+    if (precioConfig != null && precioConfig > precioRecibo) {
+      precioDefault = precioConfig;
+      origenPrecio = 'config';
+    } else if (precioRecibo > 0) {
+      precioDefault = precioRecibo;
+      origenPrecio = 'recibo';
+    } else {
+      precioDefault = precioConfig ?? 0;
+      origenPrecio = precioConfig != null ? 'config' : null;
     }
     let precioActual = precioDefault;
     // Columna "Precio" por medidor: cada fila puede tener su propio precio
@@ -1368,13 +1451,24 @@ async function cargarDetalleRecibo(recibo, tipoServicio) {
     document.addEventListener('click', () => { menuDropdown.style.display = 'none'; });
 
     contenedorDetalle.append(
-      el('div', { style: 'display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:4px; position:relative;' }, [
-        el('div', { style: 'display:flex; align-items:center; gap:8px;' }, [
-          el('label', { style: 'font-size:13px; color:var(--gray-500);' }, `Precio S/ por ${tipoServicio?.unidad_medida || 'unidad'} (editable, viene del recibo general):`),
-          el('input', {
-            type: 'number', min: '0', step: '0.0001', value: String(precioDefault), style: 'width:110px;',
-            onchange: (evt) => { precioActual = Number(evt.target.value) || 0; renderTabla(); },
-          }),
+      el('div', { style: 'display:flex; align-items:flex-start; justify-content:space-between; gap:8px; margin-bottom:4px; position:relative; flex-wrap:wrap;' }, [
+        el('div', {}, [
+          el('div', { style: 'display:flex; align-items:center; gap:8px;' }, [
+            el('label', { style: 'font-size:13px; color:var(--gray-500);' }, `Precio S/ por ${tipoServicio?.unidad_medida || 'unidad'} (editable, viene del recibo general):`),
+            el('input', {
+              type: 'number', min: '0', step: '0.0001', value: String(precioDefault), style: 'width:110px;',
+              onchange: (evt) => { precioActual = Number(evt.target.value) || 0; renderTabla(); },
+            }),
+          ]),
+          // Nunca se cobra por debajo del piso de Configuración — este hint
+          // muestra ambos valores y cuál de los dos ganó (el mayor), para
+          // que no parezca un número sacado de la nada.
+          precioConfig != null ? el('div', { style: 'font-size:12px; margin-top:4px;' }, [
+            el('span', { style: 'color:var(--gray-500);' }, `Recibo: S/ ${formatNumber(precioRecibo, 4)} · Config: S/ ${formatNumber(precioConfig, 4)} → `),
+            el('span', {
+              style: `display:inline-block; background:${origenPrecio === 'config' ? '#FEF3C7' : '#DCFCE7'}; color:${origenPrecio === 'config' ? '#92400E' : '#166534'}; padding:2px 8px; border-radius:999px; font-weight:600;`,
+            }, `usando ${origenPrecio === 'config' ? 'precio de Configuración' : 'precio del recibo'} (el mayor)`),
+          ]) : null,
         ]),
         el('div', { style: 'position:relative;' }, [menuBtn, menuDropdown]),
       ]),

@@ -166,7 +166,15 @@ table.data-table th {
 }
 table.data-table td { padding: var(--space-3) var(--space-4); border-bottom: 1px solid var(--gray-100); vertical-align: middle; }
 table.data-table tbody tr:hover { background: var(--color-primary-50); }
-table.data-table td.actions { display: flex; gap: var(--space-2); }
+/* OJO: nunca display:flex directo en un <td> — el navegador deja de tratarlo
+   como celda de tabla real y la fila queda descuadrada (no respeta la altura
+   ni la alineación vertical de las demás celdas, sobre todo si otra celda de
+   esa misma fila hace wrap a varias líneas). Los botones (.btn) ya son
+   inline-flex, así que basta con separarlos por margen y mantener la celda
+   como table-cell normal. */
+table.data-table td.actions { white-space: nowrap; }
+table.data-table td.actions > * { margin-right: var(--space-2); }
+table.data-table td.actions > *:last-child { margin-right: 0; }
 
 /* Modales --------------------------------------------------------------------- */
 .modal-overlay {

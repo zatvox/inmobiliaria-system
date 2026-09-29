@@ -74,36 +74,117 @@
       </header>
 
       <main class="content">
-        <div class="card no-print" style="margin-bottom:16px;">
-          <div class="card-title">Cuotas por cobrar de servicios (agua / luz)</div>
-          <p style="color:var(--gray-500); margin-bottom:16px;">
-            Consolidado por inmueble de lo que falta cobrar en un periodo, con el detalle de cada inquilino a la par —
-            pensado para imprimirlo y llevar el control físico, igual que la hoja de Excel que ya usan.
-          </p>
-          <div class="form-grid">
-            <div class="form-field">
-              <label for="rp-periodo">Periodo (mes) *</label>
-              <input type="month" id="rp-periodo" />
-            </div>
-            <div class="form-field">
-              <label for="rp-servicio">Tipo de servicio</label>
-              <select id="rp-servicio"><option value="">Agua y Luz (todos)</option></select>
-            </div>
-            <div class="form-field">
-              <label for="rp-estado">Alcance</label>
-              <select id="rp-estado">
-                <option value="pendientes">Solo lo que falta cobrar</option>
-                <option value="todos">Todas (incluye ya pagadas)</option>
-              </select>
-            </div>
-          </div>
-          <div style="display:flex; gap:8px; margin-top:8px;">
-            <button class="btn btn-primary" id="btn-generar-reporte">Generar reporte</button>
-            <button class="btn btn-tertiary" id="btn-imprimir-reporte" style="display:none;">🖼️ Descargar como imagen</button>
-          </div>
+        <div class="tabs no-print">
+          <button class="tab-btn active" data-tab="servicios">Servicios</button>
+          <button class="tab-btn" data-tab="alquiler">Alquiler</button>
+          <button class="tab-btn" data-tab="inquilino">Por inquilino</button>
         </div>
 
-        <div id="reporte-resultado"></div>
+        <!-- ============================= SERVICIOS ============================= -->
+        <div class="tab-panel" id="panel-servicios">
+          <div class="card no-print" style="margin-bottom:16px;">
+            <div class="card-title">Cuotas por cobrar de servicios (agua / luz)</div>
+            <p style="color:var(--gray-500); margin-bottom:16px;">
+              Consolidado por inmueble de lo que falta cobrar en un periodo, con el detalle de cada inquilino a la par —
+              pensado para imprimirlo y llevar el control físico, igual que la hoja de Excel que ya usan.
+            </p>
+            <div class="form-grid">
+              <div class="form-field">
+                <label for="rp-periodo">Periodo (mes) *</label>
+                <input type="month" id="rp-periodo" />
+              </div>
+              <div class="form-field">
+                <label for="rp-servicio">Tipo de servicio</label>
+                <select id="rp-servicio"><option value="">Agua y Luz (todos)</option></select>
+              </div>
+              <div class="form-field">
+                <label for="rp-estado">Alcance</label>
+                <select id="rp-estado">
+                  <option value="pendientes">Solo lo que falta cobrar</option>
+                  <option value="todos">Todas (incluye ya pagadas)</option>
+                </select>
+              </div>
+            </div>
+            <div style="display:flex; gap:8px; margin-top:8px;">
+              <button class="btn btn-primary" id="btn-generar-reporte">Generar reporte</button>
+              <button class="btn btn-tertiary" id="btn-imprimir-reporte" style="display:none;">🖼️ Descargar como imagen</button>
+            </div>
+          </div>
+
+          <div id="reporte-resultado"></div>
+        </div>
+
+        <!-- ============================== ALQUILER =============================== -->
+        <div class="tab-panel" id="panel-alquiler" style="display:none;">
+          <div class="card no-print" style="margin-bottom:16px;">
+            <div class="card-title">Cuotas por cobrar de alquiler (mensualidades)</div>
+            <p style="color:var(--gray-500); margin-bottom:16px;">
+              Lo mismo que el reporte de servicios, pero para la renta mensual: consolidado por inmueble de lo que
+              falta cobrar en un periodo.
+            </p>
+            <div class="form-grid">
+              <div class="form-field">
+                <label for="rpa-periodo">Periodo (mes) *</label>
+                <input type="month" id="rpa-periodo" />
+              </div>
+              <div class="form-field">
+                <label for="rpa-edificio">Edificio</label>
+                <select id="rpa-edificio"><option value="">Todos los edificios</option></select>
+              </div>
+              <div class="form-field">
+                <label for="rpa-estado">Alcance</label>
+                <select id="rpa-estado">
+                  <option value="pendientes">Solo lo que falta cobrar</option>
+                  <option value="todos">Todas (incluye ya pagadas)</option>
+                </select>
+              </div>
+            </div>
+            <div style="display:flex; gap:8px; margin-top:8px;">
+              <button class="btn btn-primary" id="btn-generar-reporte-alquiler">Generar reporte</button>
+              <button class="btn btn-tertiary" id="btn-imprimir-reporte-alquiler" style="display:none;">🖼️ Descargar como imagen</button>
+            </div>
+          </div>
+
+          <div id="reporte-alquiler-resultado"></div>
+        </div>
+
+        <!-- ============================= POR INQUILINO ============================ -->
+        <div class="tab-panel" id="panel-inquilino" style="display:none;">
+          <div class="card no-print" style="margin-bottom:16px;">
+            <div class="card-title">Estado de cuenta por inquilino</div>
+            <p style="color:var(--gray-500); margin-bottom:16px;">
+              Todo lo que un inquilino tiene pendiente (o todo su historial), mezclando renta y servicios en un solo
+              reporte — imprimible completo o solo una parte.
+            </p>
+            <div class="form-grid">
+              <div class="form-field">
+                <label for="rpi-inquilino">Inquilino *</label>
+                <select id="rpi-inquilino"><option value="">Selecciona…</option></select>
+              </div>
+              <div class="form-field">
+                <label for="rpi-alcance">Alcance</label>
+                <select id="rpi-alcance">
+                  <option value="deuda">Solo lo que tiene pendiente</option>
+                  <option value="todo">Todo su historial (incluye pagado)</option>
+                </select>
+              </div>
+              <div class="form-field">
+                <label for="rpi-incluir">Incluir</label>
+                <select id="rpi-incluir">
+                  <option value="todo">Renta + Servicios</option>
+                  <option value="alquiler">Solo renta</option>
+                  <option value="servicio">Solo servicios</option>
+                </select>
+              </div>
+            </div>
+            <div style="display:flex; gap:8px; margin-top:8px;">
+              <button class="btn btn-primary" id="btn-generar-reporte-inquilino">Generar reporte</button>
+              <button class="btn btn-tertiary" id="btn-imprimir-reporte-inquilino" style="display:none;">🖼️ Descargar como imagen</button>
+            </div>
+          </div>
+
+          <div id="reporte-inquilino-resultado"></div>
+        </div>
       </main>
     </div>
   </div>

@@ -29,11 +29,26 @@ export function formatCurrency(amount, currency = 'PEN') {
   return new Intl.NumberFormat('es-PE', { style: 'currency', currency }).format(value);
 }
 
+// Las columnas `date` de Postgres (fecha_vencimiento, fecha_pago,
+// fecha_firma, fecha_lectura, etc.) no llevan hora ni timezone — son un día
+// calendario puro, ej. "2026-09-01". El motor de JS igual las interpreta
+// como un instante UTC (medianoche), así que al mostrarlas con la timezone
+// local del navegador (Lima, Sao Paulo, la que sea) el día se corre uno
+// hacia atrás. El fix es universal y no depende de en qué timezone esté
+// configurado el proyecto de Supabase ni el navegador: si el valor es un
+// string "YYYY-MM-DD" puro, se formatea fijando timeZone:'UTC' para
+// recuperar el mismo día calendario que se guardó, siempre. Los timestamps
+// completos (created_at, o un objeto Date armado en el navegador) no entran
+// en este caso y se siguen mostrando en la hora local de quien mira la
+// pantalla, que es lo correcto para "cuándo pasó algo".
 export function formatDate(value, opts = {}) {
   if (!value) return '—';
+  const esFechaSinHora = typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value);
   const date = value instanceof Date ? value : new Date(value);
   if (Number.isNaN(date.getTime())) return '—';
-  return new Intl.DateTimeFormat('es-PE', { day: '2-digit', month: 'short', year: 'numeric', ...opts }).format(date);
+  const formatOpts = { day: '2-digit', month: 'short', year: 'numeric', ...opts };
+  if (esFechaSinHora && !formatOpts.timeZone) formatOpts.timeZone = 'UTC';
+  return new Intl.DateTimeFormat('es-PE', formatOpts).format(date);
 }
 
 export function formatNumber(value, decimals = 2) {

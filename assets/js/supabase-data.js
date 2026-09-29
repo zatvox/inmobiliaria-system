@@ -416,7 +416,7 @@ export async function marcarComisionPagada(id, comprobanteUrl = null) {
 }
 
 /* ============================ CUOTAS Y COBRANZAS ============================= */
-export async function listCuotas({ origen = '', estado = '', search = '' } = {}) {
+export async function listCuotas({ origen = '', estado = '', search = '', propiedadId = '', tipoServicioId = '', deudor = '', periodo = '' } = {}) {
   let query = supabase
     .from('cuotas')
     .select(`
@@ -426,6 +426,17 @@ export async function listCuotas({ origen = '', estado = '', search = '' } = {})
     .order('fecha_vencimiento', { ascending: true });
   if (origen) query = query.eq('origen', origen);
   if (estado) query = query.eq('estado', estado);
+  // Filtro por mes de vencimiento (periodo = 'YYYY-MM') usando rango de fecha
+  // — se resuelve en el servidor porque fecha_vencimiento sí es una columna
+  // directa de cuotas (a diferencia de propiedad/servicio, que dependen del
+  // origen y se resuelven más abajo).
+  if (periodo) {
+    const [y, m] = periodo.split('-').map(Number);
+    const desde = `${periodo}-01`;
+    const siguiente = new Date(y, m, 1); // día 1 del mes siguiente
+    const hasta = `${siguiente.getFullYear()}-${String(siguiente.getMonth() + 1).padStart(2, '0')}-01`;
+    query = query.gte('fecha_vencimiento', desde).lt('fecha_vencimiento', hasta);
+  }
   const { data, error } = await query;
   if (error) throw error;
 
@@ -438,13 +449,13 @@ export async function listCuotas({ origen = '', estado = '', search = '' } = {})
 
   const [alquileres, ventas, detalles] = await Promise.all([
     idsAlquiler.length
-      ? supabase.from('contratos_alquiler').select('id, inquilino:inquilino_id(nombre), seccion:seccion_id(nombre, propiedades(nombre_referencial))').in('id', idsAlquiler)
+      ? supabase.from('contratos_alquiler').select('id, inquilino:inquilino_id(nombre), seccion:seccion_id(nombre, propiedad_id, propiedades(nombre_referencial))').in('id', idsAlquiler)
       : Promise.resolve({ data: [] }),
     idsVenta.length
-      ? supabase.from('contratos_venta').select('id, comprador:comprador_id(nombre), seccion:seccion_id(nombre, propiedades(nombre_referencial))').in('id', idsVenta)
+      ? supabase.from('contratos_venta').select('id, comprador:comprador_id(nombre), seccion:seccion_id(nombre, propiedad_id, propiedades(nombre_referencial))').in('id', idsVenta)
       : Promise.resolve({ data: [] }),
     idsDetalle.length
-      ? supabase.from('calculo_servicios_detalle').select('id, seccion:seccion_id(nombre, propiedades(nombre_referencial)), calculo_periodo:calculo_periodo_id(periodo, tipo_servicio:tipo_servicio_id(nombre)), contrato_alquiler:contrato_alquiler_id(inquilino:inquilino_id(nombre))').in('id', idsDetalle)
+      ? supabase.from('calculo_servicios_detalle').select('id, seccion:seccion_id(nombre, propiedad_id, propiedades(nombre_referencial)), calculo_periodo:calculo_periodo_id(periodo, tipo_servicio_id, tipo_servicio:tipo_servicio_id(nombre)), contrato_alquiler:contrato_alquiler_id(inquilino:inquilino_id(nombre))').in('id', idsDetalle)
       : Promise.resolve({ data: [] }),
   ]);
 
@@ -453,29 +464,37 @@ export async function listCuotas({ origen = '', estado = '', search = '' } = {})
   const mapDetalle = new Map((detalles.data ?? []).map((d) => [d.id, d]));
 
   const enriched = data.map((c) => {
-    let deudor = '—', referencia = '—';
+    let deudor = '—', referencia = '—', propId = null, tipoServId = null;
     if (c.origen === 'alquiler') {
       const a = mapAlquiler.get(c.contrato_id);
       deudor = a?.inquilino?.nombre ?? '—';
+      propId = a?.seccion?.propiedad_id ?? null;
       referencia = a ? `${a.seccion?.propiedades?.nombre_referencial ?? ''} · ${a.seccion?.nombre ?? ''}` : '—';
     } else if (c.origen === 'venta') {
       const v = mapVenta.get(c.contrato_id);
       deudor = v?.comprador?.nombre ?? '—';
+      propId = v?.seccion?.propiedad_id ?? null;
       referencia = v ? `${v.seccion?.propiedades?.nombre_referencial ?? ''} · ${v.seccion?.nombre ?? ''}` : '—';
     } else if (c.origen === 'servicio') {
       const d = mapDetalle.get(c.calculo_servicio_detalle_id);
       deudor = d?.contrato_alquiler?.inquilino?.nombre ?? '—';
+      propId = d?.seccion?.propiedad_id ?? null;
+      tipoServId = d?.calculo_periodo?.tipo_servicio_id ?? null;
       referencia = d ? `${d.seccion?.propiedades?.nombre_referencial ?? ''} · ${d.seccion?.nombre ?? ''} · ${d.calculo_periodo?.tipo_servicio?.nombre ?? ''}` : '—';
     }
     const totalPagado = (c.pagos ?? []).filter((p) => p.estado !== 'anulado').reduce((s, p) => s + Number(p.monto), 0);
-    return { ...c, deudor, referencia, totalPagado, saldo: Number(c.monto) + Number(c.mora_aplicada) - totalPagado };
+    return { ...c, deudor, referencia, propiedadId: propId, tipoServicioId: tipoServId, totalPagado, saldo: Number(c.monto) + Number(c.mora_aplicada) - totalPagado };
   });
 
+  let result = enriched;
+  if (propiedadId) result = result.filter((c) => c.propiedadId === propiedadId);
+  if (tipoServicioId) result = result.filter((c) => c.tipoServicioId === tipoServicioId);
+  if (deudor) result = result.filter((c) => c.deudor === deudor);
   if (search) {
     const s = search.toLowerCase();
-    return enriched.filter((c) => c.deudor.toLowerCase().includes(s) || c.referencia.toLowerCase().includes(s) || (c.concepto ?? '').toLowerCase().includes(s));
+    result = result.filter((c) => c.deudor.toLowerCase().includes(s) || c.referencia.toLowerCase().includes(s) || (c.concepto ?? '').toLowerCase().includes(s));
   }
-  return enriched;
+  return result;
 }
 
 /* ================================= REPORTES =================================== */
@@ -554,6 +573,196 @@ export async function listCuotasServicioParaReporte({ periodo, tipoServicioId = 
       };
     })
     .filter((r) => !soloPendientes || r.saldo > 0.009);
+}
+
+// Rango [desde, hasta) de fechas para un periodo 'YYYY-MM' — compartido por
+// los reportes de alquiler y servicios para no repetir el cálculo del mes
+// siguiente en cada función.
+function rangoDePeriodo(periodo) {
+  const [y, m] = periodo.split('-').map(Number);
+  const desde = `${periodo}-01`;
+  const siguiente = new Date(y, m, 1);
+  const hasta = `${siguiente.getFullYear()}-${String(siguiente.getMonth() + 1).padStart(2, '0')}-01`;
+  return { desde, hasta };
+}
+
+// Reporte consolidado de cuotas de ALQUILER (mensualidades de renta) de un
+// periodo, agrupable por inmueble — mismo patrón y misma forma de fila que
+// listCuotasServicioParaReporte, para poder reutilizar el mismo render de
+// tabla en reportes.js. Un contrato multi-sección (varios pisos bajo un
+// mismo contrato) se muestra con sus secciones unidas en seccionNombre,
+// porque la cuota es una sola por contrato, no por sección.
+export async function listCuotasAlquilerParaReporte({ periodo, propiedadId = '', soloPendientes = true } = {}) {
+  if (!periodo) return [];
+  const { desde, hasta } = rangoDePeriodo(periodo);
+  let query = supabase
+    .from('cuotas')
+    .select('id, contrato_id, concepto, monto, mora_aplicada, fecha_vencimiento, estado, pagos(id, monto, fecha_pago, medio_pago, n_operacion, estado)')
+    .eq('origen', 'alquiler')
+    .gte('fecha_vencimiento', desde).lt('fecha_vencimiento', hasta)
+    .order('fecha_vencimiento', { ascending: true });
+  if (soloPendientes) query = query.neq('estado', 'anulada');
+  const { data: cuotas, error } = await query;
+  if (error) throw error;
+  if (!cuotas.length) return [];
+
+  const idsContrato = [...new Set(cuotas.map((c) => c.contrato_id).filter(Boolean))];
+  if (!idsContrato.length) return [];
+  const { data: contratos, error: e2 } = await supabase
+    .from('contratos_alquiler')
+    .select(`
+      id, inquilino:inquilino_id(nombre),
+      seccion:seccion_id(id, nombre, propiedad_id, propiedades(nombre_referencial)),
+      secciones_contrato:contratos_alquiler_secciones(seccion:seccion_id(id, nombre, propiedad_id, propiedades(nombre_referencial)))
+    `)
+    .in('id', idsContrato);
+  if (e2) throw e2;
+  const mapContrato = new Map((contratos ?? []).map((c) => [c.id, c]));
+
+  const filas = cuotas.map((c) => {
+    const ct = mapContrato.get(c.contrato_id);
+    const secciones = ct?.secciones_contrato?.length
+      ? ct.secciones_contrato.map((sc) => sc.seccion).filter(Boolean)
+      : (ct?.seccion ? [ct.seccion] : []);
+    const pagosValidos = (c.pagos ?? [])
+      .filter((p) => p.estado !== 'anulado')
+      .sort((a, b) => (a.fecha_pago ?? '').localeCompare(b.fecha_pago ?? ''));
+    const totalPagado = pagosValidos.reduce((s, p) => s + Number(p.monto), 0);
+    const importeTotal = Number(c.monto) + Number(c.mora_aplicada);
+    const saldo = importeTotal - totalPagado;
+    return {
+      id: c.id,
+      propiedadId: secciones[0]?.propiedad_id ?? null,
+      propiedadNombre: secciones[0]?.propiedades?.nombre_referencial ?? '—',
+      seccionNombre: secciones.length ? secciones.map((s) => s.nombre).join(' + ') : '—',
+      inquilinoNombre: ct?.inquilino?.nombre ?? '—',
+      tipoServicioNombre: 'Alquiler',
+      concepto: c.concepto,
+      monto: Number(c.monto),
+      moraAplicada: Number(c.mora_aplicada),
+      importeTotal,
+      totalPagado,
+      saldo,
+      estado: c.estado,
+      fechaVencimiento: c.fecha_vencimiento,
+      pagos: pagosValidos.map((p) => ({
+        monto: Number(p.monto),
+        fechaPago: p.fecha_pago,
+        medioPago: p.medio_pago,
+        nOperacion: p.n_operacion,
+      })),
+    };
+  });
+
+  const filtradas = propiedadId ? filas.filter((f) => f.propiedadId === propiedadId) : filas;
+  return filtradas.filter((r) => !soloPendientes || r.saldo > 0.009);
+}
+
+// Estado de cuenta de UN inquilino: TODAS sus cuotas con deuda (o su
+// historial completo si soloConDeuda=false), mezclando alquiler + servicios
+// en una sola lista — a diferencia de los dos reportes de arriba, este no
+// está acotado a un periodo porque es "todo lo que debe", no "lo de este
+// mes". El origen de cada fila queda marcado para que la pantalla pueda
+// filtrar a solo-renta / solo-servicios sin volver a pedir datos.
+export async function listCuotasPorInquilino({ inquilinoId, soloConDeuda = true } = {}) {
+  if (!inquilinoId) return [];
+
+  const { data: contratos, error: eContratos } = await supabase
+    .from('contratos_alquiler')
+    .select(`
+      id, inquilino:inquilino_id(nombre),
+      seccion:seccion_id(id, nombre, propiedad_id, propiedades(nombre_referencial)),
+      secciones_contrato:contratos_alquiler_secciones(seccion:seccion_id(id, nombre, propiedad_id, propiedades(nombre_referencial)))
+    `)
+    .eq('inquilino_id', inquilinoId);
+  if (eContratos) throw eContratos;
+  if (!contratos.length) return [];
+  const mapContrato = new Map(contratos.map((c) => [c.id, c]));
+  const idsContrato = contratos.map((c) => c.id);
+  const inquilinoNombre = contratos[0]?.inquilino?.nombre ?? '—';
+
+  const seccionesDe = (ct) => (ct?.secciones_contrato?.length
+    ? ct.secciones_contrato.map((sc) => sc.seccion).filter(Boolean)
+    : (ct?.seccion ? [ct.seccion] : []));
+
+  const [{ data: cuotasAlquiler, error: e1 }, { data: detalles, error: e2 }] = await Promise.all([
+    supabase
+      .from('cuotas')
+      .select('id, contrato_id, concepto, monto, mora_aplicada, fecha_vencimiento, estado, pagos(id, monto, fecha_pago, medio_pago, n_operacion, estado)')
+      .eq('origen', 'alquiler')
+      .in('contrato_id', idsContrato)
+      .neq('estado', 'anulada')
+      .order('fecha_vencimiento', { ascending: true }),
+    supabase
+      .from('calculo_servicios_detalle')
+      .select('id, seccion:seccion_id(nombre, propiedad_id, propiedades(nombre_referencial)), calculo_periodo:calculo_periodo_id(periodo, tipo_servicio:tipo_servicio_id(nombre))')
+      .in('contrato_alquiler_id', idsContrato),
+  ]);
+  if (e1) throw e1;
+  if (e2) throw e2;
+
+  const idsDetalle = (detalles ?? []).map((d) => d.id);
+  const mapDetalle = new Map((detalles ?? []).map((d) => [d.id, d]));
+  const { data: cuotasServicio, error: e3 } = idsDetalle.length
+    ? await supabase
+        .from('cuotas')
+        .select('id, calculo_servicio_detalle_id, concepto, monto, mora_aplicada, fecha_vencimiento, estado, pagos(id, monto, fecha_pago, medio_pago, n_operacion, estado)')
+        .eq('origen', 'servicio')
+        .in('calculo_servicio_detalle_id', idsDetalle)
+        .neq('estado', 'anulada')
+        .order('fecha_vencimiento', { ascending: true })
+    : { data: [], error: null };
+  if (e3) throw e3;
+
+  const armarFila = (c, { origen, propiedadNombre, seccionNombre, tipoServicioNombre }) => {
+    const pagosValidos = (c.pagos ?? [])
+      .filter((p) => p.estado !== 'anulado')
+      .sort((a, b) => (a.fecha_pago ?? '').localeCompare(b.fecha_pago ?? ''));
+    const totalPagado = pagosValidos.reduce((s, p) => s + Number(p.monto), 0);
+    const importeTotal = Number(c.monto) + Number(c.mora_aplicada);
+    const saldo = importeTotal - totalPagado;
+    return {
+      id: c.id,
+      origen,
+      propiedadNombre,
+      seccionNombre,
+      inquilinoNombre,
+      tipoServicioNombre,
+      concepto: c.concepto,
+      monto: Number(c.monto),
+      moraAplicada: Number(c.mora_aplicada),
+      importeTotal,
+      totalPagado,
+      saldo,
+      estado: c.estado,
+      fechaVencimiento: c.fecha_vencimiento,
+      pagos: pagosValidos.map((p) => ({ monto: Number(p.monto), fechaPago: p.fecha_pago, medioPago: p.medio_pago, nOperacion: p.n_operacion })),
+    };
+  };
+
+  const filasAlquiler = (cuotasAlquiler ?? []).map((c) => {
+    const ct = mapContrato.get(c.contrato_id);
+    const secciones = seccionesDe(ct);
+    return armarFila(c, {
+      origen: 'alquiler',
+      propiedadNombre: secciones[0]?.propiedades?.nombre_referencial ?? '—',
+      seccionNombre: secciones.length ? secciones.map((s) => s.nombre).join(' + ') : '—',
+      tipoServicioNombre: 'Alquiler',
+    });
+  });
+
+  const filasServicio = (cuotasServicio ?? []).map((c) => {
+    const d = mapDetalle.get(c.calculo_servicio_detalle_id);
+    return armarFila(c, {
+      origen: 'servicio',
+      propiedadNombre: d?.seccion?.propiedades?.nombre_referencial ?? '—',
+      seccionNombre: d?.seccion?.nombre ?? '—',
+      tipoServicioNombre: d?.calculo_periodo?.tipo_servicio?.nombre ?? '—',
+    });
+  });
+
+  const todas = [...filasAlquiler, ...filasServicio].sort((a, b) => (a.fechaVencimiento ?? '').localeCompare(b.fechaVencimiento ?? ''));
+  return todas.filter((r) => !soloConDeuda || r.saldo > 0.009);
 }
 
 export async function getCuota(id) {

@@ -82,8 +82,13 @@ export function agruparDetalleParaCuadro(detalleRows) {
     const detalleMedidor = medidor ? `${medidor.codigo_medidor || 'sin código'}${medidor.es_compartido ? ' · compartido' : ''}` : null;
     const etiquetaBase = cuenta ? `${cuenta.codigo}${cuenta.nombre ? ' · ' + cuenta.nombre : ''}` : g.tipoServicioNombre;
     const etiqueta = detalleMedidor ? `${etiquetaBase} (${detalleMedidor})` : etiquetaBase;
+    // Código corto para la columna de la tabla (ya no repetimos el nombre del
+    // inquilino fila por fila — eso ahora va una sola vez en la cabecera del
+    // cuadro): prioriza el código del medidor, si no hay usa el de la cuenta.
+    const codigo = medidor?.codigo_medidor || cuenta?.codigo || '—';
     g.filas.push({
       etiqueta,
+      codigo,
       seccionNombre: d.seccion?.nombre ?? '—',
       metodo: d.metodo,
       fechaLecturaAnterior: d.lectura?.fecha_lectura_anterior ?? null,
@@ -109,17 +114,47 @@ export function agruparDetalleParaCuadro(detalleRows) {
   });
 }
 
+// Color de acento por tipo de servicio — mismo criterio que colorServicio()
+// en servicios.js (azul agua / ámbar luz), pero repetido aquí en vez de
+// importado para no crear una dependencia cruzada entre módulos por un
+// detalle puramente visual.
+function colorServicioCuadro(nombreServicio) {
+  const n = (nombreServicio || '').toLowerCase();
+  if (n.includes('agua')) return '#2563EB';
+  if (n.includes('luz')) return '#D97706';
+  return '#374151';
+}
+
 // Construye el nodo DOM del cuadro (tarjeta estilo "recibo") para un grupo
 // devuelto por agruparDetalleParaCuadro. Pensado para poder capturarse tal
-// cual con html2canvas.
+// cual con html2canvas. Diseño compacto inspirado en la hoja de control
+// físico que ya usaban (cabecera de color por servicio, números grandes y
+// legibles) — ancho responsivo con tope de 560px para que nunca se salga de
+// su tarjeta contenedora, sin importar cuánto crezca el contenido.
 export function buildCuadroConsumoEl(grupo, { colorLineas = COLOR_LINEAS_DEFAULT } = {}) {
+  const acento = colorServicioCuadro(grupo.tipoServicioNombre);
   const bordeCelda = `border-bottom:1px solid ${colorLineas};`;
+  // dd/mm/aaaa en vez del "19 ago. 2026" por defecto de formatDate — más
+  // compacto y más fácil de leer rápido en una tabla apretada.
+  const fechaCorta = (value) => formatDate(value, { day: '2-digit', month: '2-digit', year: 'numeric' });
   const filasNodos = grupo.filas.map((f) => {
     const esMedidor = f.metodo === 'medidor';
     const esMontoFijo = f.metodo === 'monto_fijo';
-    const rangoFechas = f.fechaLecturaAnterior && f.fechaLectura
-      ? `${formatDate(f.fechaLecturaAnterior)} – ${formatDate(f.fechaLectura)}`
-      : (f.fechaLectura ? formatDate(f.fechaLectura) : '—');
+    // Lectura anterior → actual y el rango de fechas de lectura se apilan en
+    // 2 líneas en vez de una sola línea larga — así no fuerzan el ancho de
+    // la columna y quedan igual de legibles que en la hoja física de antes.
+    const colLectura = esMedidor && f.lecturaAnterior != null && f.lecturaActual != null
+      ? el('div', {}, [
+          el('div', {}, formatNumber(f.lecturaAnterior, 3)),
+          el('div', {}, `→ ${formatNumber(f.lecturaActual, 3)}`),
+        ])
+      : '—';
+    const colFechas = !esMontoFijo && f.fechaLecturaAnterior && f.fechaLectura
+      ? el('div', {}, [
+          el('div', {}, fechaCorta(f.fechaLecturaAnterior)),
+          el('div', {}, `– ${fechaCorta(f.fechaLectura)}`),
+        ])
+      : (!esMontoFijo && f.fechaLectura ? fechaCorta(f.fechaLectura) : '—');
     // Monto fijo (contrato) no tiene lectura ni "personas" que mostrar — es
     // un monto pactado en el contrato de alquiler, distinto de la tarifa
     // fija por persona (default global) y de un consumo medido.
@@ -132,45 +167,54 @@ export function buildCuadroConsumoEl(grupo, { colorLineas = COLOR_LINEAS_DEFAULT
       colConsumo = 'Monto fijo (contrato)';
       colPrecio = '—';
     }
-    return el('tr', {}, [
-      el('td', { style: `padding:6px 10px; font-weight:600; ${bordeCelda}` }, f.etiqueta),
-      el('td', { style: `padding:6px 10px; text-align:right; white-space:nowrap; ${bordeCelda}` }, esMontoFijo ? '—' : rangoFechas),
-      el('td', { style: `padding:6px 10px; text-align:right; ${bordeCelda}` }, esMedidor && f.lecturaAnterior != null ? formatNumber(f.lecturaAnterior, 3) : '—'),
-      el('td', { style: `padding:6px 10px; text-align:right; ${bordeCelda}` }, esMedidor && f.lecturaActual != null ? formatNumber(f.lecturaActual, 3) : '—'),
-      el('td', { style: `padding:6px 10px; text-align:right; ${bordeCelda}` }, colConsumo),
-      el('td', { style: `padding:6px 10px; text-align:right; ${bordeCelda}` }, colPrecio),
-      el('td', { style: `padding:6px 10px; text-align:right; font-weight:600; ${bordeCelda}` }, formatCurrency(f.subtotal)),
+    return el('tr', { title: f.etiqueta }, [
+      el('td', { style: `padding:8px 10px; font-weight:600; ${bordeCelda}` }, f.codigo),
+      el('td', { style: `padding:8px 10px; text-align:right; ${bordeCelda}` }, colFechas),
+      el('td', { style: `padding:8px 10px; text-align:right; white-space:nowrap; ${bordeCelda}` }, colLectura),
+      el('td', { style: `padding:8px 10px; text-align:right; white-space:nowrap; ${bordeCelda}` }, colConsumo),
+      el('td', { style: `padding:8px 10px; text-align:right; ${bordeCelda}` }, colPrecio),
+      el('td', { style: `padding:8px 10px; text-align:right; font-weight:700; ${bordeCelda}` }, formatCurrency(f.subtotal)),
     ]);
   });
 
-  return el('div', { class: 'cuadro-consumo', style: 'background:#fff; border:1px solid var(--gray-300); border-radius:10px; padding:18px; max-width:640px; font-family:inherit;' }, [
-    el('div', { style: 'display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:10px; border-bottom:2px solid var(--primary); padding-bottom:10px;' }, [
+  return el('div', {
+    class: 'cuadro-consumo',
+    style: `background:#fff; border:1px solid var(--gray-300); border-radius:10px; overflow:hidden; max-width:760px; width:100%; box-sizing:border-box; font-family:inherit;`,
+  }, [
+    // Cabecera de color sólido por servicio — mismo criterio de color que el
+    // resto del sistema (leyenda Agua/Luz de la pestaña Lecturas).
+    el('div', { style: `background:${acento}; color:#fff; padding:14px 18px; display:flex; justify-content:space-between; align-items:flex-start;` }, [
       el('div', {}, [
-        el('div', { style: 'font-size:18px; font-weight:700; letter-spacing:0.5px;' }, grupo.tipoServicioNombre.toUpperCase()),
-        el('div', { style: 'font-size:13px; color:var(--gray-500); margin-top:2px;' }, grupo.propiedadNombre),
-        el('div', { style: 'font-size:13px; color:var(--gray-500);' }, grupo.seccionNombre),
+        el('div', { style: 'font-size:20px; font-weight:800; letter-spacing:0.5px;' }, grupo.tipoServicioNombre.toUpperCase()),
+        el('div', { style: 'font-size:13px; opacity:0.9; margin-top:2px;' }, grupo.propiedadNombre),
+        el('div', { style: 'font-size:13px; opacity:0.9;' }, grupo.seccionNombre),
       ]),
       el('div', { style: 'text-align:right;' }, [
-        el('div', { style: 'font-size:13px; color:var(--gray-500);' }, 'Periodo'),
-        el('div', { style: 'font-weight:600;' }, grupo.periodo),
+        el('div', { style: 'font-size:12px; opacity:0.85;' }, 'Periodo'),
+        el('div', { style: 'font-weight:700; font-size:15px;' }, grupo.periodo),
       ]),
     ]),
-    grupo.inquilinoNombre ? el('div', { style: 'margin-bottom:10px; font-size:14px;' }, [el('span', { style: 'color:var(--gray-500);' }, 'Inquilino: '), el('strong', {}, grupo.inquilinoNombre)]) : null,
-    el('table', { style: 'width:100%; border-collapse:collapse; font-size:13px;' }, [
-      el('thead', {}, [el('tr', { style: `background:var(--gray-100); ${bordeCelda}` }, [
-        el('th', { style: `padding:6px 10px; text-align:left; ${bordeCelda}` }, 'Cuenta'),
-        el('th', { style: `padding:6px 10px; text-align:right; ${bordeCelda}` }, 'Periodo de lectura'),
-        el('th', { style: `padding:6px 10px; text-align:right; ${bordeCelda}` }, 'Lect. anterior'),
-        el('th', { style: `padding:6px 10px; text-align:right; ${bordeCelda}` }, 'Lect. actual'),
-        el('th', { style: `padding:6px 10px; text-align:right; ${bordeCelda}` }, 'Consumo'),
-        el('th', { style: `padding:6px 10px; text-align:right; ${bordeCelda}` }, 'Precio unit.'),
-        el('th', { style: `padding:6px 10px; text-align:right; ${bordeCelda}` }, 'Subtotal'),
-      ])]),
-      el('tbody', {}, filasNodos),
+    grupo.inquilinoNombre ? el('div', { style: `background:${acento}18; padding:10px 18px; font-size:16px; font-weight:700; color:${acento};` }, grupo.inquilinoNombre) : null,
+    el('div', { style: 'padding:0 18px;' }, [
+      el('table', { style: 'width:100%; border-collapse:collapse; table-layout:fixed; font-size:14px; margin-top:10px;' }, [
+        el('colgroup', {}, [
+          el('col', { style: 'width:22%;' }), el('col', { style: 'width:19%;' }), el('col', { style: 'width:16%;' }),
+          el('col', { style: 'width:17%;' }), el('col', { style: 'width:11%;' }), el('col', { style: 'width:15%;' }),
+        ]),
+        el('thead', {}, [el('tr', { style: `background:var(--gray-100); ${bordeCelda}` }, [
+          el('th', { style: `padding:8px 10px; text-align:left; ${bordeCelda}` }, 'Cuenta'),
+          el('th', { style: `padding:8px 10px; text-align:right; ${bordeCelda}` }, 'Periodo lectura'),
+          el('th', { style: `padding:8px 10px; text-align:right; ${bordeCelda}` }, 'Lectura'),
+          el('th', { style: `padding:8px 10px; text-align:right; ${bordeCelda}` }, 'Consumo'),
+          el('th', { style: `padding:8px 10px; text-align:right; ${bordeCelda}` }, 'Precio'),
+          el('th', { style: `padding:8px 10px; text-align:right; ${bordeCelda}` }, 'Subtotal'),
+        ])]),
+        el('tbody', {}, filasNodos),
+      ]),
     ]),
-    el('div', { style: 'display:flex; justify-content:space-between; align-items:center; margin-top:14px; padding-top:10px; border-top:2px solid var(--primary);' }, [
-      el('span', { style: 'font-size:14px; font-weight:600;' }, 'TOTAL A PAGAR'),
-      el('span', { style: 'font-size:20px; font-weight:700; color:var(--primary);' }, formatCurrency(grupo.total)),
+    el('div', { style: `display:flex; justify-content:space-between; align-items:center; margin:14px 18px 18px; padding-top:12px; border-top:2px solid ${acento};` }, [
+      el('span', { style: 'font-size:15px; font-weight:700;' }, 'TOTAL A PAGAR'),
+      el('span', { style: `font-size:22px; font-weight:800; color:${acento};` }, formatCurrency(grupo.total)),
     ]),
   ]);
 }
