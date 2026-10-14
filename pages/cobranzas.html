@@ -10,6 +10,32 @@
 <link rel="stylesheet" href="../assets/css/components.css" />
 <link rel="stylesheet" href="../assets/css/responsive.css" />
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    /* ---- Diseño Cobranzas ---- */
+    .tabs { gap:6px; border-bottom:none; background:#fff; padding:6px; border-radius:12px; box-shadow:0 1px 3px rgba(16,24,40,.08); display:inline-flex; margin-bottom:16px; }
+    .tabs .tab-btn { border:none; border-radius:8px; padding:8px 18px; font-weight:600; color:var(--gray-500); background:transparent; }
+    .tabs .tab-btn:hover { background:var(--gray-100); }
+    .tabs .tab-btn.active { background:var(--color-primary); color:#fff; }
+    .tabs .tab-btn.tab-abonos { margin-left:10px; position:relative; }
+    .tabs .tab-btn.tab-abonos::before { content:''; position:absolute; left:-8px; top:20%; height:60%; width:1px; background:var(--gray-300); }
+    .filtros-bar { background:#fff; border-radius:12px; padding:12px 14px; box-shadow:0 1px 3px rgba(16,24,40,.08); margin-bottom:16px; }
+    .table-wrap.card-tabla { background:#fff; border-radius:12px; box-shadow:0 1px 3px rgba(16,24,40,.08); overflow:auto; }
+    .table-wrap.card-tabla table.data-table th { position:sticky; top:0; background:var(--gray-100); z-index:1; text-transform:uppercase; font-size:11px; letter-spacing:.04em; }
+    .table-wrap.card-tabla table.data-table td { font-size:13px; }
+    .acciones-fila { display:flex; align-items:center; gap:6px; justify-content:flex-end; }
+    .btn-dots { border:1px solid var(--gray-300); background:#fff; border-radius:8px; width:32px; height:32px; font-size:18px; line-height:1; cursor:pointer; color:var(--gray-700); }
+    .btn-dots:hover { background:var(--gray-100); }
+    .menu-flotante { position:fixed; z-index:500; min-width:190px; background:#fff; border:1px solid var(--gray-300); border-radius:10px; box-shadow:0 10px 30px rgba(16,24,40,.18); padding:6px; }
+    .menu-flotante button { display:flex; align-items:center; gap:10px; width:100%; text-align:left; border:none; background:transparent; padding:9px 12px; border-radius:7px; font-size:13px; cursor:pointer; color:var(--gray-700); }
+    .menu-flotante button:hover { background:var(--gray-100); }
+    .menu-flotante button.peligro { color:var(--color-danger); }
+    .menu-flotante hr { border:none; border-top:1px solid var(--gray-100); margin:4px 0; }
+    .kpi-mini { display:grid; grid-template-columns:repeat(auto-fit,minmax(190px,1fr)); gap:12px; margin-bottom:16px; }
+    .kpi-mini .kpi-card { padding:14px 18px; }
+    .kpi-mini .kpi-value { font-size:22px; }
+    .doc-link { display:inline-flex; align-items:center; gap:4px; padding:2px 8px; border-radius:999px; background:var(--color-primary-50); color:var(--color-primary); font-size:12px; text-decoration:none; margin-right:4px; }
+    .vacio-pro { padding:36px; text-align:center; color:var(--gray-500); }
+  </style>
 </head>
 <body data-page="cobranzas">
   <div class="app-shell">
@@ -69,9 +95,11 @@
           <button class="tab-btn" data-tab="alquiler">Alquiler</button>
           <button class="tab-btn" data-tab="venta">Venta</button>
           <button class="tab-btn" data-tab="servicio">Servicios</button>
+          <button class="tab-btn tab-abonos" data-tab="abonos">🧾 Abonos</button>
         </div>
 
-        <div style="display:flex; gap:12px; margin-bottom:16px; flex-wrap:wrap; align-items:center;">
+        <div id="vista-cuotas">
+        <div class="filtros-bar" style="display:flex; gap:12px; flex-wrap:wrap; align-items:center;">
           <input type="text" id="search-input" placeholder="Buscar por nombre, sección o propiedad…" style="max-width:260px;" />
           <select id="filter-inquilino" style="max-width:200px;"><option value="">Todos los inquilinos</option></select>
           <select id="filter-edificio" style="max-width:200px;"><option value="">Todos los edificios</option></select>
@@ -86,17 +114,47 @@
             <option value="anulada">Anulada</option>
           </select>
           <div style="flex:1 0 0; min-width:8px;"></div>
+          <button class="btn btn-primary" id="btn-cobro-masivo">💰 Cobrar masivo</button>
           <button class="btn btn-secondary" id="btn-actualizar-vencidas" data-admin-only>Actualizar vencidas</button>
         </div>
 
-        <div class="table-wrap">
+        <div class="table-wrap card-tabla">
           <table class="data-table">
             <thead><tr><th>Deudor</th><th>Referencia</th><th>Concepto</th><th>Total</th><th>Saldo</th><th>Vence</th><th>Estado</th><th></th></tr></thead>
             <tbody id="cuotas-tbody"><tr><td colspan="8"><div class="skeleton" style="height:20px;"></div></td></tr></tbody>
           </table>
         </div>
 
-        <div class="card" style="margin-top:24px;">
+
+        </div><!-- /vista-cuotas -->
+
+        <div id="vista-abonos" style="display:none;">
+          <div class="kpi-mini">
+            <div class="kpi-card"><div class="kpi-label">Abonos listados</div><div class="kpi-value" id="ab-count">0</div></div>
+            <div class="kpi-card"><div class="kpi-label">Total abonado</div><div class="kpi-value" id="ab-total" style="color:var(--color-success);">S/ 0.00</div></div>
+            <div class="kpi-card"><div class="kpi-label">Por verificar</div><div class="kpi-value" id="ab-pend" style="color:var(--color-warning);">0</div></div>
+          </div>
+          <div class="filtros-bar" style="display:flex; gap:12px; flex-wrap:wrap; align-items:center;">
+            <input type="text" id="ab-search" placeholder="Buscar deudor, referencia, recibo…" style="max-width:260px;" />
+            <select id="ab-origen" style="max-width:170px;">
+              <option value="">Todos los tipos</option><option value="alquiler">Alquiler</option><option value="servicio">Servicios</option><option value="venta">Venta</option>
+            </select>
+            <select id="ab-medio" style="max-width:170px;"><option value="">Todos los medios</option></select>
+            <select id="ab-estado" style="max-width:170px;">
+              <option value="">Todos los estados</option><option value="registrado">Registrado</option><option value="verificado">Verificado</option><option value="anulado">Anulado</option>
+            </select>
+            <input type="month" id="ab-periodo" style="max-width:160px;" title="Mes de la fecha de pago" />
+            <button class="btn btn-tertiary btn-sm" id="ab-limpiar">Limpiar</button>
+          </div>
+          <div class="table-wrap card-tabla">
+            <table class="data-table">
+              <thead><tr><th>Fecha pago</th><th>Deudor</th><th>Referencia</th><th>Concepto</th><th>Monto</th><th>Medio</th><th>N° recibo/op.</th><th>Estado</th><th>Documentos</th><th>Notas</th><th>Registrado</th><th></th></tr></thead>
+              <tbody id="ab-tbody"><tr><td colspan="12"><div class="skeleton" style="height:20px;"></div></td></tr></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="card" id="card-comisiones" style="margin-top:24px;">
           <div class="card-title">Comisiones de agentes</div>
           <div id="comisiones-wrap"><div class="skeleton" style="height:20px;"></div></div>
         </div>
@@ -150,6 +208,152 @@
         <div class="modal-footer">
           <button type="button" class="btn btn-tertiary" data-modal-close>Cancelar</button>
           <button type="submit" class="btn btn-primary" id="btn-guardar-pago">Registrar pago</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ============================ MODAL FLOTANTE: COBRO MASIVO ============================ -->
+  <style>
+    #modal-cobro-masivo .modal { width:min(1180px,96vw); max-width:none; max-height:92vh; display:flex; flex-direction:column; }
+    #modal-cobro-masivo .modal-body { flex:1 1 auto; overflow-y:auto; padding:16px 22px; }
+    #modal-cobro-masivo .cm-filtros { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:10px; margin-bottom:14px; }
+    #modal-cobro-masivo .cm-filtros input, #modal-cobro-masivo .cm-filtros select { width:100%; max-width:none; }
+    #modal-cobro-masivo .cm-tabla { max-height:300px; overflow:auto; border:1px solid var(--gray-300); border-radius:10px; }
+    #modal-cobro-masivo .cm-tabla thead th { position:sticky; top:0; background:var(--gray-100); z-index:1; }
+    #modal-cobro-masivo .cm-datos { background:var(--gray-100); border-radius:10px; padding:14px; margin-top:14px; }
+    #modal-cobro-masivo .cm-datos .form-grid { grid-template-columns:repeat(4,minmax(0,1fr)); }
+    #modal-cobro-masivo .cm-footer { display:flex; align-items:center; justify-content:space-between; gap:16px; flex-wrap:wrap; border-top:1px solid var(--gray-300); padding:12px 22px; background:#fff; border-radius:0 0 12px 12px; }
+    #modal-cobro-masivo .cm-totales { display:flex; gap:22px; flex-wrap:wrap; align-items:center; }
+    #modal-cobro-masivo .cm-total-grande { font-size:18px; color:var(--color-success); }
+    @media (max-width:900px) { #modal-cobro-masivo .cm-filtros, #modal-cobro-masivo .cm-datos .form-grid { grid-template-columns:repeat(2,minmax(0,1fr)); } }
+  </style>
+  <div class="modal-overlay" id="modal-cobro-masivo" aria-hidden="true">
+    <div class="modal">
+      <div class="modal-header">
+        <h3>💰 Cobro masivo</h3>
+        <button class="modal-close" data-modal-close aria-label="Cerrar">×</button>
+      </div>
+      <div class="modal-body">
+        <div class="cm-filtros">
+          <input type="text" id="cm-search" placeholder="Buscar nombre, sección o propiedad…" />
+          <select id="cm-filter-origen">
+            <option value="">Alquiler + Servicios</option>
+            <option value="alquiler">Solo mensualidades</option>
+            <option value="servicio">Solo servicios</option>
+            <option value="venta">Venta</option>
+          </select>
+          <select id="cm-filter-servicio"><option value="">Todos los servicios</option></select>
+          <select id="cm-filter-inquilino"><option value="">Todos los inquilinos</option></select>
+          <select id="cm-filter-edificio"><option value="">Todos los edificios</option></select>
+          <input type="month" id="cm-filter-periodo" title="Mes de vencimiento (vacío = todos)" />
+          <select id="cm-filter-estado">
+            <option value="">Con saldo (todas)</option>
+            <option value="pendiente">Pendiente</option>
+            <option value="vencida">Vencida</option>
+            <option value="parcial">Parcial</option>
+          </select>
+          <button type="button" class="btn btn-tertiary" id="cm-limpiar">Limpiar filtros</button>
+        </div>
+
+        <div class="cm-tabla">
+          <table class="data-table">
+            <thead><tr>
+              <th style="width:32px;"><input type="checkbox" id="cm-chk-todas" title="Seleccionar/quitar todas las visibles" /></th>
+              <th>Deudor</th><th>Referencia</th><th>Concepto</th><th>Vence</th><th>Estado</th><th>Saldo</th><th style="width:125px;">A cobrar</th>
+            </tr></thead>
+            <tbody id="cm-tbody"></tbody>
+          </table>
+        </div>
+
+        <form id="cm-form" class="cm-datos">
+          <div class="form-grid">
+            <div class="form-field">
+              <label for="cm-mv-fecha">Fecha de pago *</label>
+              <input type="date" id="cm-mv-fecha" required />
+            </div>
+            <div class="form-field">
+              <label for="cm-mv-recibo">N° de recibo</label>
+              <input type="text" id="cm-mv-recibo" />
+            </div>
+            <div class="form-field">
+              <label for="cm-mv-medio">Medio de pago *</label>
+              <select id="cm-mv-medio" required></select>
+            </div>
+            <div class="form-field">
+              <label for="cm-mv-files">Adjuntar documentos (máx. 2)</label>
+              <input type="file" id="cm-mv-files" accept="image/*,.pdf" multiple />
+            </div>
+            <div class="form-field" style="grid-column:1 / -1;">
+              <label for="cm-mv-notas">Notas</label>
+              <textarea id="cm-mv-notas" rows="2"></textarea>
+            </div>
+          </div>
+        </form>
+      </div>
+      <div class="cm-footer">
+        <div class="cm-totales">
+          <div>Seleccionadas: <strong id="cm-res-count">0</strong></div>
+          <div>Mensualidades: <strong id="cm-res-alq">S/ 0.00</strong></div>
+          <div>Servicios: <strong id="cm-res-serv">S/ 0.00</strong></div>
+          <div class="cm-total-grande">Total: <strong id="cm-res-total">S/ 0.00</strong></div>
+        </div>
+        <div style="display:flex; gap:8px;">
+          <button type="button" class="btn btn-tertiary" id="cm-vaciar">Vaciar selección</button>
+          <button type="button" class="btn btn-tertiary" data-modal-close>Cerrar</button>
+          <button type="submit" form="cm-form" class="btn btn-primary" id="cm-guardar" disabled>Registrar cobro</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================ MODAL: EDITAR ABONO ============================ -->
+  <div class="modal-overlay" id="modal-editar-abono" aria-hidden="true">
+    <div class="modal" style="max-width:640px;">
+      <div class="modal-header">
+        <h3>✏️ Editar abono</h3>
+        <button class="modal-close" data-modal-close aria-label="Cerrar">×</button>
+      </div>
+      <form id="form-editar-abono">
+        <div class="modal-body">
+          <p id="ea-contexto" style="background:var(--gray-100); padding:10px 12px; border-radius:8px; margin-bottom:16px;"></p>
+          <div class="form-grid">
+            <div class="form-field">
+              <label for="ea-monto">Monto *</label>
+              <input type="number" id="ea-monto" step="0.01" min="0.01" required />
+              <div class="hint" id="ea-hint"></div>
+            </div>
+            <div class="form-field">
+              <label for="ea-fecha">Fecha de pago *</label>
+              <input type="date" id="ea-fecha" required />
+            </div>
+            <div class="form-field">
+              <label for="ea-medio">Medio de pago *</label>
+              <select id="ea-medio" required></select>
+            </div>
+            <div class="form-field">
+              <label for="ea-operacion">N° de recibo / operación</label>
+              <input type="text" id="ea-operacion" />
+            </div>
+            <div class="form-field">
+              <label for="ea-voucher">Voucher / comprobante</label>
+              <input type="file" id="ea-voucher" accept="image/*,.pdf" />
+              <div class="hint" id="ea-voucher-actual"></div>
+            </div>
+            <div class="form-field">
+              <label for="ea-foto">Foto del recibo firmado</label>
+              <input type="file" id="ea-foto" accept="image/*" />
+              <div class="hint" id="ea-foto-actual"></div>
+            </div>
+            <div class="form-field full">
+              <label for="ea-notas">Notas</label>
+              <textarea id="ea-notas"></textarea>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-tertiary" data-modal-close>Cancelar</button>
+          <button type="submit" class="btn btn-primary" id="ea-guardar">Guardar cambios</button>
         </div>
       </form>
     </div>

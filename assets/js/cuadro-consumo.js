@@ -222,11 +222,8 @@ export function buildCuadroConsumoEl(grupo, { colorLineas = COLOR_LINEAS_DEFAULT
 // Renderiza el nodo fuera de pantalla, lo captura con html2canvas y
 // descarga el PNG resultante — así se puede llamar tanto para un cuadro ya
 // insertado en el DOM (Cálculo) como para uno armado al vuelo (Cobranzas).
-export async function descargarCuadroComoImagen(nodo, filename) {
-  // Si el nodo ya está insertado y visible en la página, lo capturamos tal
-  // cual (mejor fidelidad de estilos computados). Si se armó al vuelo (ej.
-  // desde Cobranzas, sin insertarlo en ningún lado), lo montamos oculto
-  // fuera de pantalla primero para que html2canvas pueda medir/pintarlo.
+// Captura cualquier nodo (ya en el DOM o armado al vuelo) como <canvas>.
+export async function capturarNodoACanvas(nodo) {
   const yaEnDom = document.body.contains(nodo);
   let wrapper = null;
   if (!yaEnDom) {
@@ -235,12 +232,16 @@ export async function descargarCuadroComoImagen(nodo, filename) {
   }
   try {
     const html2canvas = await cargarHtml2Canvas();
-    const canvas = await html2canvas(nodo, { scale: 2, backgroundColor: '#ffffff', useCORS: true });
-    const link = document.createElement('a');
-    link.download = `${filename}.png`;
-    link.href = canvas.toDataURL('image/png');
-    link.click();
+    return await html2canvas(nodo, { scale: 2, backgroundColor: '#ffffff', useCORS: true });
   } finally {
     if (wrapper) wrapper.remove();
   }
+}
+
+export async function descargarCuadroComoImagen(nodo, filename) {
+  const canvas = await capturarNodoACanvas(nodo);
+  const link = document.createElement('a');
+  link.download = `${filename}.png`;
+  link.href = canvas.toDataURL('image/png');
+  link.click();
 }

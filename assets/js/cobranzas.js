@@ -8,10 +8,12 @@ import { isAdmin } from './auth.js';
 import {
   listCuotas, getCuota, aplicarMoraVencidas, registrarPago, verificarPago, anularPago, anularCuota,
   uploadArchivo, getSignedUrl, getCatalogo, listComisionesAgentes, marcarComisionPagada,
-  listDetalleCalculoPorCuota, eliminarCuotaServicio, listPropiedades, listTiposServicio,
+  listDetalleCalculoPorCuota, eliminarCuotaServicio, listPropiedades, listTiposServicio, listPagos, actualizarPago,
 } from './supabase-data.js';
 import { qs, qsa, el, formatCurrency, formatDate, badgeHtml, showToast, openModal, closeModal, validateForm, setLoading, confirmAction, debounce } from './utils.js';
-import { agruparDetalleParaCuadro, buildCuadroConsumoEl, descargarCuadroComoImagen, getColorLineasTabla } from './cuadro-consumo.js';
+import { abrirCobroMasivo } from './cobro-masivo.js';
+import { agruparDetalleParaCuadro, buildCuadroConsumoEl, descargarCuadroComoImagen, getColorLineasTabla, capturarNodoACanvas } from './cuadro-consumo.js';
+import { enviarImagenWhatsapp, mensajeServicio, mensajeMensualidad, buildTarjetaMensualidadEl } from './whatsapp.js';
 
 let profile = null;
 let activeOrigen = '';
@@ -39,6 +41,7 @@ async function main() {
   bindTabs();
   bindToolbar();
   bindFormPago();
+  bindEditarAbono();
   await Promise.all([refresh(), renderComisiones()]);
 }
 
@@ -77,8 +80,13 @@ async function fillInquilinoSelect() {
 function bindTabs() {
   qsa('.tab-btn[data-tab]').forEach((btn) => {
     btn.addEventListener('click', () => {
-      activeOrigen = btn.dataset.tab === 'todas' ? '' : btn.dataset.tab;
       qsa('.tab-btn[data-tab]').forEach((b) => b.classList.toggle('active', b === btn));
+      const esAbonos = btn.dataset.tab === 'abonos';
+      qs('#vista-cuotas').style.display = esAbonos ? 'none' : '';
+      qs('#vista-abonos').style.display = esAbonos ? '' : 'none';
+      qs('#card-comisiones').style.display = esAbonos ? 'none' : '';
+      if (esAbonos) { cargarAbonos(); return; }
+      activeOrigen = btn.dataset.tab === 'todas' ? '' : btn.dataset.tab;
       refresh();
     });
   });
@@ -91,6 +99,7 @@ function bindToolbar() {
   qs('#filter-edificio')?.addEventListener('change', refresh);
   qs('#filter-servicio')?.addEventListener('change', refresh);
   qs('#filter-periodo')?.addEventListener('change', refresh);
+  qs('#btn-cobro-masivo')?.addEventListener('click', () => abrirCobroMasivo({ alGuardar: refresh }));
   qs('#btn-actualizar-vencidas')?.addEventListener('click', async () => {
     const btn = qs('#btn-actualizar-vencidas');
     setLoading(btn, true, 'Actualizando…');
@@ -166,18 +175,19 @@ function renderRow(c) {
     el('td', {}, [el('span', { style: c.saldo > 0 ? 'color:var(--color-danger); font-weight:600;' : 'color:var(--color-success); font-weight:600;' }, formatCurrency(c.saldo))]),
     el('td', {}, formatDate(c.fecha_vencimiento)),
     el('td', { html: badgeHtml(c.estado) }),
-    el('td', { class: 'actions' }, [
+    el('td', {}, [el('div', { class: 'acciones-fila' }, [
       c.saldo > 0.009 && c.estado !== 'anulada'
         ? el('button', { class: 'btn btn-primary btn-sm', onclick: () => openPagoModal(c) }, 'Registrar pago')
         : null,
-      el('button', { class: 'btn btn-tertiary btn-sm', onclick: () => openDetalleModal(c.id) }, 'Ver'),
-      c.origen === 'servicio'
-        ? el('button', { class: 'btn btn-tertiary btn-sm', onclick: (evt) => descargarCuadroCuota(c, evt.target) }, '📷 Cuadro')
-        : null,
-      c.origen === 'servicio'
-        ? el('button', { class: 'btn btn-tertiary btn-sm', 'data-admin-only': '', onclick: (evt) => eliminarCuota(c, evt.target) }, '🗑️ Eliminar')
-        : null,
-    ]),
+      el('button', { class: 'btn-dots', title: 'Más acciones', onclick: (evt) => {
+        evt.stopPropagation();
+        const items = [{ icon: '👁️', label: 'Ver detalle', fn: () => openDetalleModal(c.id) }];
+        if (c.origen === 'servicio') items.push({ icon: '📷', label: 'Descargar cuadro', fn: () => descargarCuadroCuota(c, botonStub()) });
+        if (c.origen === 'servicio' || c.origen === 'alquiler') items.push({ icon: '📲', label: 'Enviar por WhatsApp', fn: () => enviarCuotaWhatsapp(c) });
+        if (c.origen === 'servicio' && isAdmin(profile)) items.push({ sep: true }, { icon: '🗑️', label: 'Eliminar', peligro: true, fn: () => eliminarCuota(c, botonStub()) });
+        abrirMenuFila(evt.currentTarget, items);
+      } }, '⋮'),
+    ])]),
   ]);
 }
 
@@ -280,6 +290,198 @@ function bindFormPago() {
     } catch (err) {
       console.error(err);
       showToast('No se pudo registrar el pago.', 'error');
+    } finally {
+      setLoading(btn, false);
+    }
+  });
+}
+
+
+/* ============================== WHATSAPP ====================================== */
+// Servicio: manda el cuadro de consumo. Alquiler: una tarjeta de mensualidad.
+function enviarCuotaWhatsapp(c) {
+  const obtenerCanvas = async () => {
+    if (c.origen === 'servicio') {
+      const [detalleRows, colorLineas] = await Promise.all([listDetalleCalculoPorCuota(c.id), getColorLineasTabla()]);
+      if (!detalleRows.length) throw new Error('Sin detalle de consumo para esta cuota.');
+      const [grupo] = agruparDetalleParaCuadro(detalleRows);
+      return capturarNodoACanvas(buildCuadroConsumoEl(grupo, { colorLineas }));
+    }
+    return capturarNodoACanvas(buildTarjetaMensualidadEl(c));
+  };
+  return enviarImagenWhatsapp({
+    telefono: c.telefono,
+    mensaje: c.origen === 'servicio' ? mensajeServicio(c) : mensajeMensualidad(c),
+    obtenerCanvas,
+    nombreArchivo: `${c.origen}-${(c.deudor ?? '').split(' ')[0].toLowerCase()}`,
+  });
+}
+
+/* ============================== MENÚ ⋮ FLOTANTE ================================ */
+const botonStub = () => ({ dataset: {}, innerHTML: '', disabled: false });
+let menuAbierto = null;
+function cerrarMenuFila() { menuAbierto?.remove(); menuAbierto = null; }
+function abrirMenuFila(anchor, items) {
+  cerrarMenuFila();
+  const menu = el('div', { class: 'menu-flotante' }, items.map((it) => (it.sep
+    ? el('hr')
+    : el('button', { class: it.peligro ? 'peligro' : '', onclick: () => { cerrarMenuFila(); it.fn(); } }, [el('span', {}, it.icon), it.label]))));
+  document.body.append(menu);
+  const r = anchor.getBoundingClientRect();
+  const h = menu.offsetHeight, w = menu.offsetWidth;
+  menu.style.top = `${r.bottom + h + 8 > window.innerHeight ? Math.max(8, r.top - h - 4) : r.bottom + 4}px`;
+  menu.style.left = `${Math.max(8, Math.min(r.right - w, window.innerWidth - w - 8))}px`;
+  menuAbierto = menu;
+}
+document.addEventListener('click', cerrarMenuFila);
+window.addEventListener('scroll', cerrarMenuFila, true);
+window.addEventListener('resize', cerrarMenuFila);
+
+/* ================================== ABONOS ===================================== */
+let abonosCache = [];
+let abonosListos = false;
+
+async function cargarAbonos() {
+  const tbody = qs('#ab-tbody');
+  if (!abonosListos) {
+    abonosListos = true;
+    try {
+      const medios = await getCatalogo('medio_pago');
+      medios.forEach((m) => qs('#ab-medio').append(el('option', { value: m.valor }, m.valor)));
+    } catch (e) { console.error(e); }
+    qs('#ab-search').addEventListener('input', debounce(renderAbonos, 250));
+    ['#ab-origen', '#ab-medio', '#ab-estado', '#ab-periodo'].forEach((x) => qs(x).addEventListener('change', renderAbonos));
+    qs('#ab-limpiar').addEventListener('click', () => {
+      qs('#ab-search').value = '';
+      ['#ab-origen', '#ab-medio', '#ab-estado', '#ab-periodo'].forEach((x) => { qs(x).value = ''; });
+      renderAbonos();
+    });
+  }
+  tbody.innerHTML = '<tr><td colspan="12"><div class="skeleton" style="height:20px;"></div></td></tr>';
+  try {
+    abonosCache = await listPagos();
+    renderAbonos();
+  } catch (err) {
+    console.error(err);
+    showToast('No se pudieron cargar los abonos.', 'error');
+  }
+}
+
+function renderAbonos() {
+  const q = qs('#ab-search').value.trim().toLowerCase();
+  const origen = qs('#ab-origen').value, medio = qs('#ab-medio').value, estado = qs('#ab-estado').value, periodo = qs('#ab-periodo').value;
+  const rows = abonosCache.filter((p) => (!origen || p.origen === origen)
+    && (!medio || p.medio_pago === medio)
+    && (!estado || p.estado === estado)
+    && (!periodo || (p.fecha_pago ?? '').startsWith(periodo))
+    && (!q || [p.deudor, p.referencia, p.concepto, p.n_operacion, p.notas].some((v) => (v ?? '').toLowerCase().includes(q))));
+  const validos = rows.filter((p) => p.estado !== 'anulado');
+  qs('#ab-count').textContent = rows.length;
+  qs('#ab-total').textContent = formatCurrency(validos.reduce((s, p) => s + Number(p.monto), 0));
+  qs('#ab-pend').textContent = rows.filter((p) => p.estado === 'registrado').length;
+  const tbody = qs('#ab-tbody');
+  tbody.innerHTML = '';
+  if (!rows.length) {
+    tbody.append(el('tr', {}, [el('td', { colspan: '12' }, [el('div', { class: 'vacio-pro' }, [el('div', { style: 'font-size:32px;' }, '🧾'), el('p', {}, 'No hay abonos para este filtro.')])])]));
+    return;
+  }
+  rows.forEach((p) => tbody.append(filaAbono(p)));
+}
+
+function filaAbono(p) {
+  const docs = [];
+  const link = (path, label) => el('a', { href: '#', class: 'doc-link', onclick: async (evt) => {
+    evt.preventDefault();
+    try { window.open(await getSignedUrl(path), '_blank'); } catch (e) { console.error(e); showToast('No se pudo abrir el documento.', 'error'); }
+  } }, label);
+  if (p.comprobante_url) docs.push(link(p.comprobante_url, '📎 Voucher'));
+  if (p.foto_cobranza_url) docs.push(link(p.foto_cobranza_url, '📷 Recibo'));
+  return el('tr', { style: p.estado === 'anulado' ? 'opacity:.55;' : '' }, [
+    el('td', { style: 'white-space:nowrap;' }, formatDate(p.fecha_pago, { day: '2-digit', month: '2-digit', year: 'numeric' })),
+    el('td', {}, p.deudor),
+    el('td', {}, p.referencia),
+    el('td', {}, `${ORIGEN_LABELS[p.origen] ?? p.origen}${p.concepto ? ' · ' + p.concepto : ''}`),
+    el('td', { style: 'font-weight:600; white-space:nowrap;' }, formatCurrency(p.monto)),
+    el('td', {}, p.medio_pago),
+    el('td', {}, p.n_operacion ?? '—'),
+    el('td', { html: badgeHtml(p.estado) }),
+    el('td', { style: 'white-space:nowrap;' }, docs.length ? docs : '—'),
+    el('td', { style: 'max-width:200px; color:var(--gray-500);' }, p.notas ?? '—'),
+    el('td', { style: 'white-space:nowrap; color:var(--gray-500);' }, p.created_at ? formatDate(p.created_at.slice(0, 10), { day: '2-digit', month: '2-digit', year: 'numeric' }) : '—'),
+    el('td', {}, [el('button', { class: 'btn-dots', title: 'Más acciones', onclick: (evt) => {
+      evt.stopPropagation();
+      const items = [{ icon: '👁️', label: 'Ver cuota', fn: () => openDetalleModal(p.cuota_id) }];
+      if (p.estado !== 'anulado') items.push({ icon: '✏️', label: 'Editar abono', fn: () => openEditarAbono(p) });
+      if (isAdmin(profile) && p.estado === 'registrado') items.push({ icon: '✅', label: 'Verificar pago', fn: async () => {
+        try { await verificarPago(p.id); showToast('Pago verificado.', 'success'); await cargarAbonos(); } catch (e) { console.error(e); showToast('No se pudo verificar.', 'error'); }
+      } });
+      if (isAdmin(profile) && p.estado !== 'anulado') items.push({ sep: true }, { icon: '🚫', label: 'Anular pago', peligro: true, fn: async () => {
+        if (!confirmAction('¿Anular este pago? El saldo de la cuota se recalculará.')) return;
+        try { await anularPago(p.id); showToast('Pago anulado.', 'success'); await cargarAbonos(); await refresh(); } catch (e) { console.error(e); showToast('No se pudo anular.', 'error'); }
+      } });
+      abrirMenuFila(evt.currentTarget, items);
+    } }, '⋮')]),
+  ]);
+}
+
+/* ============================== EDITAR ABONO ================================== */
+async function openEditarAbono(p) {
+  const form = qs('#form-editar-abono');
+  form.reset();
+  form.dataset.pagoId = p.id;
+  // Máximo permitido = saldo actual de la cuota + lo que este abono ya cubre.
+  const maximo = Number(p.saldoCuota) + Number(p.monto);
+  form.dataset.maximo = maximo.toFixed(2);
+  qs('#ea-contexto').innerHTML = `<strong>${p.deudor}</strong> · ${p.referencia}<br>${p.concepto ?? ''}`;
+  qs('#ea-monto').value = Number(p.monto).toFixed(2);
+  qs('#ea-monto').max = maximo.toFixed(2);
+  qs('#ea-hint').textContent = `Máximo: ${formatCurrency(maximo)}`;
+  qs('#ea-fecha').value = p.fecha_pago ?? '';
+  qs('#ea-operacion').value = p.n_operacion ?? '';
+  qs('#ea-notas').value = p.notas ?? '';
+  qs('#ea-voucher-actual').textContent = p.comprobante_url ? 'Ya tiene voucher; sube uno nuevo para reemplazarlo.' : 'Sin voucher.';
+  qs('#ea-foto-actual').textContent = p.foto_cobranza_url ? 'Ya tiene foto; sube una nueva para reemplazarla.' : 'Sin foto.';
+  const sel = qs('#ea-medio');
+  sel.innerHTML = '';
+  try {
+    const medios = await getCatalogo('medio_pago');
+    medios.forEach((m) => sel.append(el('option', { value: m.valor }, m.valor)));
+  } catch (e) { console.error(e); }
+  if (p.medio_pago && ![...sel.options].some((o) => o.value === p.medio_pago)) sel.append(el('option', { value: p.medio_pago }, p.medio_pago));
+  sel.value = p.medio_pago;
+  openModal('modal-editar-abono');
+}
+
+function bindEditarAbono() {
+  const form = qs('#form-editar-abono');
+  form.addEventListener('submit', async (evt) => {
+    evt.preventDefault();
+    if (!validateForm(form)) return;
+    const monto = Number(qs('#ea-monto').value);
+    if (monto > Number(form.dataset.maximo) + 0.009) { showToast(`El monto excede el máximo permitido (${formatCurrency(form.dataset.maximo)}).`, 'error'); return; }
+    const btn = qs('#ea-guardar');
+    setLoading(btn, true, 'Guardando…');
+    try {
+      const id = form.dataset.pagoId;
+      const patch = {
+        monto,
+        fecha_pago: qs('#ea-fecha').value,
+        medio_pago: qs('#ea-medio').value,
+        n_operacion: qs('#ea-operacion').value.trim() || null,
+        notas: qs('#ea-notas').value.trim() || null,
+      };
+      const v = qs('#ea-voucher').files[0];
+      const f = qs('#ea-foto').files[0];
+      if (v) patch.comprobante_url = await uploadArchivo(v, `pagos/${id}`);
+      if (f) patch.foto_cobranza_url = await uploadArchivo(f, `pagos/${id}`);
+      await actualizarPago(id, patch);
+      showToast('Abono actualizado.', 'success');
+      closeModal('modal-editar-abono');
+      await cargarAbonos();
+      await refresh();
+    } catch (err) {
+      console.error(err);
+      showToast('No se pudo actualizar el abono.', 'error');
     } finally {
       setLoading(btn, false);
     }

@@ -310,3 +310,23 @@ table.data-table td.actions > *:last-child { margin-right: 0; }
 .meter-flags { display: flex; gap: 6px; }
 .meter-flag { font-size: 10px; padding: 2px 8px; border-radius: 999px; background: var(--gray-100); color: var(--gray-700); }
 .meter-flag.on { background: var(--color-success-bg); color: var(--color-success); }
+
+/* ---- Ordenamiento de tablas (table-sort.js) ---- */
+table th.sortable { cursor: pointer; user-select: none; white-space: nowrap; }
+table th.sortable:hover { color: var(--color-primary); }
+table th.sortable::after { content: '↕'; margin-left: 6px; font-size: 11px; opacity: .3; }
+table th.sortable.sort-asc::after { content: '▲'; opacity: 1; color: var(--color-primary); }
+table th.sortable.sort-desc::after { content: '▼'; opacity: 1; color: var(--color-primary); }
+
+/* ---- Estándar de tablas: menú ⋮ de columnas (table-cols.js) ---- */
+.tcm-shell { position: relative; }
+.tcm-btn { position: absolute; top: 6px; right: 8px; z-index: 5; width: 28px; height: 28px; border: 1px solid var(--gray-300); background: #fff; border-radius: 8px; font-size: 18px; line-height: 1; cursor: pointer; color: var(--gray-700); box-shadow: 0 1px 2px rgba(16,24,40,.08); }
+.tcm-btn:hover { background: var(--gray-100); }
+.tcm-btn.activo { border-color: var(--color-primary); color: var(--color-primary); background: var(--color-primary-50); }
+.tcm-shell > .table-wrap, .tcm-shell > .cm-tabla { margin-bottom: 0; }
+.tcm-menu { position: fixed; z-index: 600; min-width: 210px; max-height: 70vh; overflow: auto; background: #fff; border: 1px solid var(--gray-300); border-radius: 12px; box-shadow: 0 10px 30px rgba(16,24,40,.18); padding: 10px 12px; }
+.tcm-title { font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--gray-500); margin-bottom: 8px; }
+.tcm-list label { display: flex; align-items: center; gap: 8px; padding: 5px 2px; font-size: 13px; cursor: pointer; white-space: nowrap; }
+.tcm-reset { margin-top: 8px; width: 100%; border: none; background: var(--gray-100); border-radius: 8px; padding: 7px; font-size: 12px; font-weight: 600; cursor: pointer; color: var(--gray-700); }
+.tcm-reset:hover { background: var(--gray-300); }
+.tcm-shell table.data-table thead th:last-child { padding-right: 44px; }

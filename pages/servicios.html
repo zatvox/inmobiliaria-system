@@ -235,61 +235,112 @@
   </div>
 
   <!-- ============================ MODAL: LECTURA ============================ -->
+  <style>
+    /* Cuadro tipo Excel */
+    .grid-bar { display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap; padding:10px 12px; background:#fff; border-radius:10px; box-shadow:0 1px 3px rgba(16,24,40,.08); margin-bottom:10px; }
+    .grid-bar-add { display:flex; align-items:center; gap:8px; }
+    .grid-bar-label { font-weight:700; font-size:13px; color:var(--color-primary); }
+    .grid-bar-hint { font-size:12px; color:var(--gray-500); }
+    #lecturas-vista-cuadro:focus { outline:none; }
+    table.grid-excel td.celda-lectura { cursor:cell; border:1px solid var(--gray-100); min-width:110px; height:38px; }
+    table.grid-excel td.celda-lectura:hover { background:#eef4ff; }
+    table.grid-excel td.celda-lectura.sel { outline:2px solid var(--color-primary); outline-offset:-2px; background:#e6efff; }
+    table.grid-excel tr.fila-nueva td { background:#fffbea; }
+    table.grid-excel tr.fila-nueva td:first-child { background:#fff6d6; }
+    .grid-chip-nueva { margin-left:8px; font-size:10px; font-weight:700; text-transform:uppercase; background:#f5b301; color:#fff; border-radius:999px; padding:1px 7px; }
+    .grid-quitar { margin-left:6px; border:none; background:transparent; color:var(--color-danger); font-size:16px; cursor:pointer; line-height:1; }
+    /* Modal de lectura moderno */
+    #modal-lectura .modal { max-width:720px; border-radius:16px; overflow:hidden; }
+    #modal-lectura .modal-header { background:linear-gradient(135deg,var(--color-primary),#2d5a8a); color:#fff; border-bottom:none; padding:18px 24px; }
+    #modal-lectura .modal-header h3 { color:#fff; display:flex; align-items:center; gap:10px; margin:0; }
+    #modal-lectura .modal-close { color:#fff; opacity:.85; }
+    #modal-lectura .modal-body { padding:20px 24px; max-height:70vh; overflow-y:auto; }
+    .le-seccion { font-size:11px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; color:var(--gray-500); margin:4px 0 10px; }
+    .le-chip { border-left:5px solid var(--color-primary); background:var(--gray-100); border-radius:10px; padding:10px 14px; margin:12px 0 18px; }
+    .le-chip-serv { font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.05em; color:var(--gray-500); }
+    .le-chip-med { font-weight:600; color:var(--gray-800); margin-top:2px; }
+    .le-par { display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-bottom:12px; }
+    .le-card { border:1px solid var(--gray-300); border-radius:12px; padding:14px; }
+    .le-card.ant { background:var(--gray-100); }
+    .le-card.act { border:2px solid var(--color-primary); background:#f5f9ff; }
+    .le-card h4 { margin:0 0 10px; font-size:13px; }
+    .le-card .form-field { margin-bottom:10px; }
+    .le-card input { width:100%; }
+    #le-lectura-actual { font-size:20px; font-weight:700; text-align:right; }
+    .le-consumo { border-radius:10px; padding:10px 14px; font-weight:600; background:var(--gray-100); color:var(--gray-500); margin-bottom:18px; }
+    .le-consumo.ok { background:var(--color-success-bg); color:var(--color-success); }
+    .le-consumo.neg { background:var(--color-danger-bg); color:var(--color-danger); }
+    #modal-lectura .modal-footer { background:var(--gray-100); border-top:none; padding:14px 24px; }
+    @media (max-width:640px) { .le-par { grid-template-columns:1fr; } }
+  </style>
   <div class="modal-overlay" id="modal-lectura" aria-hidden="true">
     <div class="modal">
       <div class="modal-header">
-        <h3 id="modal-lectura-title">Registrar lectura</h3>
+        <h3><span>📟</span><span id="modal-lectura-title">Registrar lectura</span></h3>
         <button class="modal-close" data-modal-close aria-label="Cerrar">×</button>
       </div>
       <form id="form-lectura">
         <div class="modal-body">
+          <div class="le-seccion">Medidor</div>
           <div class="form-grid">
             <div class="form-field">
               <label for="le-propiedad">Propiedad</label>
               <select id="le-propiedad" class="select-propiedad"></select>
-              <div class="hint">Filtra la lista de medidores de abajo.</div>
             </div>
             <div class="form-field">
               <label for="le-servicio">Tipo de servicio</label>
               <select id="le-servicio"><option value="">Todos los servicios</option></select>
-              <div class="hint">Filtra la lista de medidores de abajo.</div>
             </div>
             <div class="form-field full">
               <label for="le-medidor">Medidor *</label>
               <select id="le-medidor" required><option value="">Selecciona…</option></select>
-              <div class="hint">Se muestra el inquilino actual (por contrato), la sección y el código de cada medidor.</div>
             </div>
-            <div class="form-field">
-              <label for="le-fecha-anterior">Fecha lectura anterior</label>
-              <input type="date" id="le-fecha-anterior" />
-              <div class="hint">Se sugiere sola con la fecha de la última lectura registrada de este medidor; corrígela si hace falta.</div>
+          </div>
+          <div class="le-chip" id="le-resumen" style="display:none;"></div>
+
+          <div class="le-seccion">Lecturas</div>
+          <div class="le-par">
+            <div class="le-card ant">
+              <h4>⏮ Anterior</h4>
+              <div class="form-field">
+                <label for="le-fecha-anterior">Fecha</label>
+                <input type="date" id="le-fecha-anterior" />
+              </div>
+              <div class="form-field" style="margin-bottom:0;">
+                <label for="le-lectura-anterior">Lectura</label>
+                <input type="number" id="le-lectura-anterior" step="0.001" />
+                <div class="hint">Se sugiere sola; corrígela si hace falta.</div>
+              </div>
             </div>
-            <div class="form-field">
-              <label for="le-lectura-anterior">Lectura anterior</label>
-              <input type="number" id="le-lectura-anterior" step="0.001" />
-              <div class="hint">Se sugiere sola con el valor de esa lectura anterior.</div>
+            <div class="le-card act">
+              <h4>📍 Actual</h4>
+              <div class="form-field">
+                <label for="le-fecha-actual">Fecha *</label>
+                <input type="date" id="le-fecha-actual" required />
+              </div>
+              <div class="form-field" style="margin-bottom:0;">
+                <label for="le-lectura-actual">Lectura *</label>
+                <input type="number" id="le-lectura-actual" step="0.001" required />
+              </div>
             </div>
-            <div class="form-field">
-              <label for="le-fecha-actual">Fecha lectura actual *</label>
-              <input type="date" id="le-fecha-actual" required />
-            </div>
-            <div class="form-field">
-              <label for="le-lectura-actual">Lectura actual *</label>
-              <input type="number" id="le-lectura-actual" step="0.001" required />
-            </div>
+          </div>
+          <div class="le-consumo" id="le-consumo">Ingresa la lectura actual para ver el consumo.</div>
+
+          <div class="le-seccion">Adjuntos y notas</div>
+          <div class="form-grid">
             <div class="form-field full">
               <label for="le-foto-file">Foto del medidor</label>
               <input type="file" id="le-foto-file" accept="image/*" />
             </div>
             <div class="form-field full">
               <label for="le-notas">Notas</label>
-              <textarea id="le-notas"></textarea>
+              <textarea id="le-notas" rows="2"></textarea>
             </div>
           </div>
         </div>
         <div class="modal-footer">
           <button type="button" class="btn btn-tertiary" data-modal-close>Cancelar</button>
-          <button type="submit" class="btn btn-primary" id="btn-guardar-lectura">Guardar lectura</button>
+          <button type="submit" class="btn btn-primary" id="btn-guardar-lectura">💾 Guardar lectura</button>
         </div>
       </form>
     </div>

@@ -9,9 +9,11 @@ import {
   listContratosAlquiler, getContratoAlquiler, createContratoAlquiler, updateContratoAlquiler,
   listContratosVenta, getContratoVenta, createContratoVenta, updateContratoVenta,
   listSeccionesDisponibles, listPersonas, createComisionAgente,
-  listTiposServicio, guardarServiciosFijosContrato, guardarSeccionesContrato,
+  listTiposServicio, guardarServiciosFijosContrato, planSincronizarMontoFijoServicios, aplicarSincronizacionMontoFijoServicios, guardarSeccionesContrato,
+  listCuotasAlquilerPendientes, actualizarMontoCuotasAlquilerPendientes,
+  planCronogramaAlquiler, aplicarCronogramaAlquiler,
 } from './supabase-data.js';
-import { qs, qsa, el, formatCurrency, formatDate, badgeHtml, showToast, openModal, closeModal, validateForm, setLoading, debounce } from './utils.js';
+import { qs, qsa, el, formatCurrency, formatDate, badgeHtml, showToast, openModal, closeModal, validateForm, setLoading, debounce, confirmAction } from './utils.js';
 
 let profile = null;
 let activeTab = 'alquiler';
@@ -119,6 +121,14 @@ async function openAlquilerModal(contrato = null) {
   qsa('.form-field', form).forEach((f) => f.classList.remove('invalid'));
   qs('#modal-alquiler-title').textContent = contrato ? 'Editar contrato de alquiler' : 'Nuevo contrato de alquiler';
   form.dataset.editingId = contrato?.id ?? '';
+  // Monto de renta tal cual estaba al abrir el modal — se compara contra lo
+  // que el usuario termine guardando para saber si hay que avisar sobre las
+  // cuotas pendientes (ver bindFormAlquiler).
+  form.dataset.originalMontoRenta = contrato ? String(contrato.monto_renta ?? 0) : '';
+  form.dataset.originalFechaInicio = contrato?.fecha_inicio ?? '';
+  form.dataset.originalFechaFin = contrato?.fecha_fin ?? '';
+  form.dataset.originalDiaVenc = contrato ? String(contrato.dia_vencimiento ?? '') : '';
+  form.dataset.originalEstado = contrato?.estado ?? '';
 
   const [secciones, inquilinos, agentes, avales] = await Promise.all([
     listSeccionesDisponibles({ paraVenta: false }),
@@ -180,6 +190,7 @@ async function openAlquilerModal(contrato = null) {
       avalSelect.value = contrato.aval_id;
     }
     (contrato.servicios_fijos ?? []).forEach((sf) => agregarFilaServicioFijo(sf.tipo_servicio_id, sf.monto_fijo));
+    form.dataset.originalServiciosFijos = JSON.stringify(Object.fromEntries((contrato.servicios_fijos ?? []).map((sf) => [sf.tipo_servicio_id, Number(sf.monto_fijo)])));
 
     const seccionesContrato = contrato.secciones_contrato ?? [];
     if (seccionesContrato.length) {
@@ -296,6 +307,18 @@ function bindFormAlquiler() {
     }
     erroresSecciones.style.display = 'none';
 
+    // Validaciones de fechas / día de pago.
+    const fechaInicio = qs('#al-fecha-inicio').value;
+    const fechaFin = qs('#al-fecha-fin').value;
+    const diaVenc = Number(qs('#al-dia-venc').value);
+    if (!Number.isInteger(diaVenc) || diaVenc < 1 || diaVenc > 31) { showToast('El día de vencimiento debe estar entre 1 y 31.', 'error'); return; }
+    if (fechaFin && fechaFin < fechaInicio) { showToast('La fecha de fin no puede ser anterior a la fecha de inicio del contrato.', 'error'); return; }
+    if (filasSecciones.some((f) => f.fecha_fin && f.fecha_fin < f.fecha_inicio)) { showToast('En una sección, la fecha de fin no puede ser anterior a su inicio.', 'error'); return; }
+    const inicioOriginales = filasSecciones.filter((f) => !f.es_adenda && (!editingId || f._existente)).map((f) => f.fecha_inicio).sort()[0];
+    if (inicioOriginales && inicioOriginales !== fechaInicio) {
+      if (!confirmAction(`La fecha de inicio del contrato (${formatDate(fechaInicio)}) no coincide con la de su sección original (${formatDate(inicioOriginales)}).\n\n¿Guardar así de todos modos?`)) return;
+    }
+
     // Al crear un contrato nuevo, todas sus filas son parte del contrato
     // original (no hay "adenda" todavía). Al editar uno existente, las filas
     // que ya traía conservan su es_adenda/numero_adenda; las que se agregaron
@@ -313,6 +336,65 @@ function bindFormAlquiler() {
     // compatibilidad) es siempre una del grupo original, nunca una adenda.
     const seccionPrincipal = seccionesParaGuardar.find((f) => !f.es_adenda) ?? seccionesParaGuardar[0];
 
+    // Si se está editando un contrato y el monto de renta total cambió, las
+    // cuotas que ya se generaron (al crear el contrato) quedan con el monto
+    // VIEJO — generar_cuotas_alquiler solo corre una vez, al crear. Se avisa
+    // explícitamente cuáles cuotas pendientes se actualizarían y se pide
+    // confirmación antes de tocarlas; las ya pagadas o anuladas nunca se
+    // tocan, para no alterar el historial de cobros ya cerrado.
+    const montoRentaOriginal = Number(form.dataset.originalMontoRenta || 0);
+    const montoCambio = editingId && Math.abs(montoRentaTotal - montoRentaOriginal) > 0.009;
+    let cuotasPendientes = [];
+    let sincronizarCuotas = false;
+    if (montoCambio) {
+      try {
+        cuotasPendientes = await listCuotasAlquilerPendientes(editingId);
+      } catch (err) {
+        console.error(err);
+      }
+      if (cuotasPendientes.length) {
+        const desde = formatDate(cuotasPendientes[0].fecha_vencimiento);
+        const hasta = formatDate(cuotasPendientes[cuotasPendientes.length - 1].fecha_vencimiento);
+        sincronizarCuotas = confirmAction(
+          `El monto de renta cambió de ${formatCurrency(montoRentaOriginal)} a ${formatCurrency(montoRentaTotal)}.\n\n` +
+          `Este contrato tiene ${cuotasPendientes.length} cuota(s) pendiente(s) de cobro (${desde} – ${hasta}) todavía con el monto anterior.\n\n` +
+          `¿Actualizar también esas cuotas pendientes al nuevo monto? Las cuotas ya pagadas no se tocan.`,
+        );
+      }
+    }
+
+    // Si cambió el inicio, el fin o el día de pago, el cronograma de cuotas
+    // cambia: se calcula qué cuotas sin pagos quedarían obsoletas (se anulan,
+    // no se borran) y cuáles faltan por crear, y se pide confirmación.
+    let planCronograma = null;
+    const fechasCambiaron = editingId && (
+      fechaInicio !== form.dataset.originalFechaInicio
+      || (fechaFin || '') !== form.dataset.originalFechaFin
+      || String(diaVenc) !== form.dataset.originalDiaVenc
+    );
+    if (editingId) {
+      try {
+        // Sin cambio de fechas igual se revisa si quedaron cuotas duplicadas u
+        // obsoletas de una edición anterior (solo se anulan, no se crean).
+        const plan = await planCronogramaAlquiler(editingId, { fecha_inicio: fechaInicio, dia_vencimiento: diaVenc, fecha_fin: fechaFin || null }, { soloObsoletas: !fechasCambiaron });
+        if (plan.anular.length || plan.crear.length) {
+          const rango = (arr) => (arr.length ? `${formatDate(arr[0].fecha_vencimiento)} – ${formatDate(arr[arr.length - 1].fecha_vencimiento)}` : '');
+          const ok = confirmAction(
+            (fechasCambiaron ? 'Cambiaste las fechas del contrato; el cronograma de cuotas se ajustará:' : 'Se detectaron cuotas duplicadas/obsoletas de un cronograma anterior:') + '\n\n' +
+            `• Se ANULARÁN ${plan.anular.length} cuota(s) pendiente(s)/vencida(s) sin pagos que ya no corresponden ${rango(plan.anular)}.\n` +
+            `• Se CREARÁN ${plan.crear.length} cuota(s) nueva(s) ${rango(plan.crear)}.\n\n` +
+            'Las cuotas con pagos nunca se tocan. Si cancelas, el contrato NO se guarda.',
+          );
+          if (!ok) return;
+          planCronograma = plan;
+        }
+      } catch (err) {
+        console.error(err);
+        showToast('No se pudo calcular el ajuste de cuotas; no se guardó el contrato.', 'error');
+        return;
+      }
+    }
+
     const payload = {
       seccion_id: seccionPrincipal.seccion_id,
       monto_renta: montoRentaTotal,
@@ -328,12 +410,43 @@ function bindFormAlquiler() {
       notas: qs('#al-notas').value || null,
       n_ocupantes: qs('#al-ocupantes').value ? Number(qs('#al-ocupantes').value) : null,
     };
-    if (editingId) payload.estado = qs('#al-estado').value;
+    // Solo se envía el estado si cambió: el trigger de la BD regenera cuotas
+    // cada vez que se actualiza la columna estado (aunque no cambie), y eso
+    // duplicaba el cronograma al mover fechas.
+    if (editingId && qs('#al-estado').value !== form.dataset.originalEstado) payload.estado = qs('#al-estado').value;
 
     const serviciosFijos = leerFilasServiciosFijos().filter((sf) => sf.tipo_servicio_id);
     if (serviciosFijos.some((sf) => !sf.monto_fijo)) { showToast('Cada servicio con monto fijo debe tener un monto mayor a 0.', 'error'); return; }
     const tiposRepetidos = new Set(serviciosFijos.map((sf) => sf.tipo_servicio_id)).size !== serviciosFijos.length;
     if (tiposRepetidos) { showToast('No repitas el mismo tipo de servicio en los montos fijos.', 'error'); return; }
+
+    // Montos fijos de servicios: si cambió el monto de un servicio, se
+    // revisan los consumos ya calculados/facturados y se ofrece actualizar las
+    // cuotas de servicio todavía sin pagos (igual que con la mensualidad).
+    let planServicios = null;
+    if (editingId) {
+      const originales = JSON.parse(form.dataset.originalServiciosFijos || '{}');
+      const cambiados = serviciosFijos.filter((sf) => originales[sf.tipo_servicio_id] != null && Math.abs(originales[sf.tipo_servicio_id] - sf.monto_fijo) > 0.009);
+      if (cambiados.length) {
+        try {
+          const plan = await planSincronizarMontoFijoServicios(editingId, cambiados);
+          if (plan.items.length || plan.bloqueadas.length) {
+            const lineas = plan.items.slice(0, 8).map((i) => `• ${i.tipoNombre} ${i.periodo}: ${formatCurrency(i.antes)} → ${formatCurrency(i.despues)}${i.sinCuota ? ' (aún sin cobranza)' : ''}`);
+            if (plan.items.length > 8) lineas.push(`• … y ${plan.items.length - 8} más`);
+            const ok = confirmAction(
+              'Cambiaste el monto fijo de un servicio.\n\n' +
+              (plan.items.length ? `Se ACTUALIZARÁN ${plan.items.length} consumo(s)/cuota(s) de servicio pendientes:\n${lineas.join('\n')}\n\n` : '') +
+              (plan.bloqueadas.length ? `${plan.bloqueadas.length} cuota(s) con pagos (parciales/pagadas) NO se modifican.\n\n` : '') +
+              (plan.items.length ? '¿Actualizar también esas cuotas? Aceptar = actualizar · Cancelar = dejar las cuotas con el monto anterior (el contrato igual se guarda con el nuevo monto fijo).' : 'Solo se guardará el nuevo monto fijo para los próximos cálculos.'),
+            );
+            if (ok && plan.items.length) planServicios = plan;
+          }
+        } catch (err) {
+          console.error(err);
+          showToast('No se pudo revisar las cuotas de servicio; se guardará solo el nuevo monto fijo.', 'warning');
+        }
+      }
+    }
 
     const btn = qs('#btn-guardar-alquiler');
     setLoading(btn, true);
@@ -341,7 +454,28 @@ function bindFormAlquiler() {
       let contrato;
       if (editingId) {
         contrato = await updateContratoAlquiler(editingId, payload);
-        showToast('Contrato actualizado.', 'success');
+        if (planCronograma) {
+          try {
+            await aplicarCronogramaAlquiler(contrato.id, planCronograma, montoRentaTotal);
+            showToast(`Cronograma ajustado: ${planCronograma.anular.length} cuota(s) anulada(s), ${planCronograma.crear.length} creada(s).`, 'success');
+          } catch (err) {
+            console.error(err);
+            showToast('El contrato se actualizó, pero no se pudo ajustar el cronograma de cuotas.', 'warning');
+          }
+        }
+        if (sincronizarCuotas) {
+          try {
+            const actualizadas = await actualizarMontoCuotasAlquilerPendientes(contrato.id, montoRentaTotal);
+            showToast(`Contrato actualizado. Se ajustaron ${actualizadas.length} cuota(s) pendiente(s) al nuevo monto.`, 'success');
+          } catch (err) {
+            console.error(err);
+            showToast('El contrato se actualizó, pero no se pudieron ajustar las cuotas pendientes.', 'warning');
+          }
+        } else if (montoCambio && cuotasPendientes.length) {
+          showToast('Contrato actualizado. Las cuotas pendientes se dejaron con el monto anterior, tal como elegiste.', 'info');
+        } else {
+          showToast('Contrato actualizado.', 'success');
+        }
       } else {
         contrato = await createContratoAlquiler({ ...payload, estado: 'vigente' });
         showToast('Contrato creado. Las cuotas mensuales se generaron automáticamente.', 'success');
@@ -355,6 +489,15 @@ function bindFormAlquiler() {
       }
       try {
         await guardarServiciosFijosContrato(contrato.id, serviciosFijos);
+        if (planServicios) {
+          try {
+            const n = await aplicarSincronizacionMontoFijoServicios(planServicios.items);
+            showToast(`Montos fijos actualizados: ${planServicios.items.length} consumo(s) y ${n} cuota(s) de servicio ajustadas.`, 'success');
+          } catch (err) {
+            console.error(err);
+            showToast('Se guardó el monto fijo, pero no se pudieron actualizar las cuotas de servicio existentes.', 'warning');
+          }
+        }
       } catch (err) {
         console.error(err);
         showToast('El contrato se guardó, pero no se pudieron guardar los montos fijos de servicios.', 'warning');

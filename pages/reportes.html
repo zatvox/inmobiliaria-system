@@ -17,6 +17,18 @@
   .reporte-tabla td { vertical-align: top; padding-top: 10px; padding-bottom: 10px; }
   .reporte-header-inmueble td { font-weight: 800; font-size: 15px; padding-top: 14px; padding-bottom: 8px; }
   .reporte-subtotal-inmueble td { font-weight: 700; border-top: 1px dashed var(--gray-300); padding-top: 8px; padding-bottom: 14px; }
+  .cols-menu { position: absolute; top: 10px; right: 12px; }
+  .cols-toggle { background: none; border: 0; font-size: 22px; line-height: 1; padding: 2px 8px; border-radius: 6px; cursor: pointer; color: var(--gray-600); }
+  .cols-toggle:hover { background: var(--gray-100); }
+  .cols-list { display: none; position: absolute; right: 0; top: 100%; z-index: 50; min-width: 190px; background: #fff; border: 1px solid var(--gray-300); border-radius: 8px; box-shadow: 0 6px 18px rgba(0,0,0,.12); padding: 8px 12px; }
+  .cols-menu.open .cols-list { display: block; }
+  .cols-title { font-size: 12px; font-weight: 700; color: var(--gray-500); margin-bottom: 4px; text-transform: uppercase; }
+  .cols-list label { display: flex; align-items: center; gap: 6px; padding: 5px 0; font-size: 14px; cursor: pointer; white-space: nowrap; }
+  .dl-menu { position: relative; align-items: center; }
+  .dl-list { display: none; position: absolute; top: 100%; left: 0; margin-top: 4px; z-index: 50; min-width: 120px; background: #fff; border: 1px solid var(--gray-300); border-radius: 8px; box-shadow: 0 6px 18px rgba(0,0,0,.12); padding: 4px; }
+  .dl-menu.open .dl-list { display: block; }
+  .dl-list button { display: block; width: 100%; text-align: left; background: none; border: 0; padding: 8px 12px; border-radius: 6px; font: inherit; font-size: 14px; cursor: pointer; }
+  .dl-list button:hover { background: var(--gray-100); }
   .reporte-total-row td { font-weight: 700; border-top: 2px solid var(--gray-700); background: var(--gray-100); }
   @media print {
     .sidebar, .topbar, .no-print { display: none !important; }
@@ -107,7 +119,7 @@
             </div>
             <div style="display:flex; gap:8px; margin-top:8px;">
               <button class="btn btn-primary" id="btn-generar-reporte">Generar reporte</button>
-              <button class="btn btn-tertiary" id="btn-imprimir-reporte" style="display:none;">🖼️ Descargar como imagen</button>
+              <div class="dl-menu" id="btn-imprimir-reporte" style="display:none;"><button type="button" class="btn btn-tertiary dl-toggle">⬇️ Descargar ▾</button><div class="dl-list"><button type="button" data-fmt="pdf">PDF</button><button type="button" data-fmt="png">PNG</button><button type="button" data-fmt="xlsx">XLSX</button></div></div>
             </div>
           </div>
 
@@ -141,7 +153,7 @@
             </div>
             <div style="display:flex; gap:8px; margin-top:8px;">
               <button class="btn btn-primary" id="btn-generar-reporte-alquiler">Generar reporte</button>
-              <button class="btn btn-tertiary" id="btn-imprimir-reporte-alquiler" style="display:none;">🖼️ Descargar como imagen</button>
+              <div class="dl-menu" id="btn-imprimir-reporte-alquiler" style="display:none;"><button type="button" class="btn btn-tertiary dl-toggle">⬇️ Descargar ▾</button><div class="dl-list"><button type="button" data-fmt="pdf">PDF</button><button type="button" data-fmt="png">PNG</button><button type="button" data-fmt="xlsx">XLSX</button></div></div>
             </div>
           </div>
 
@@ -169,6 +181,10 @@
                 </select>
               </div>
               <div class="form-field">
+                <label for="rpi-periodo">Mes (opcional — vacío = todos los meses)</label>
+                <input type="month" id="rpi-periodo" />
+              </div>
+              <div class="form-field">
                 <label for="rpi-incluir">Incluir</label>
                 <select id="rpi-incluir">
                   <option value="todo">Renta + Servicios</option>
@@ -179,7 +195,8 @@
             </div>
             <div style="display:flex; gap:8px; margin-top:8px;">
               <button class="btn btn-primary" id="btn-generar-reporte-inquilino">Generar reporte</button>
-              <button class="btn btn-tertiary" id="btn-imprimir-reporte-inquilino" style="display:none;">🖼️ Descargar como imagen</button>
+              <div class="dl-menu" id="btn-imprimir-reporte-inquilino" style="display:none;"><button type="button" class="btn btn-tertiary dl-toggle">⬇️ Descargar ▾</button><div class="dl-list"><button type="button" data-fmt="pdf">PDF</button><button type="button" data-fmt="png">PNG</button><button type="button" data-fmt="xlsx">XLSX</button></div></div>
+              <button type="button" class="btn btn-tertiary" id="btn-wa-reporte-inquilino" style="display:none;">📲 WhatsApp</button>
             </div>
           </div>
 

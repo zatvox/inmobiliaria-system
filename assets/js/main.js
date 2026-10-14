@@ -4,6 +4,8 @@
  * Cada página llama a initShell('clave-de-pagina') al cargar.
  */
 import { requireAuth, signOut, isAdmin } from './auth.js';
+import './table-sort.js';
+import './table-cols.js';
 import { qs, qsa, initModalDismiss } from './utils.js';
 
 export async function initShell(activePageKey) {

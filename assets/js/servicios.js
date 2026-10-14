@@ -490,6 +490,34 @@ async function renderLecturasPendientes(propiedadId, periodo, lecturas, tipoServ
 // fechas quedan ordenadas de verdad (no dependen de que se haya tecleado en
 // orden). El color de encabezado por tipo de servicio es lo que sí se copia
 // del Excel porque ahí funciona.
+// Filas de fecha agregadas a mano en el cuadro (propiedadId -> Set de fechas ISO).
+const fechasExtraPorPropiedad = new Map();
+let celdaSeleccionada = null; // `${medidorId}|${fecha}` de la celda activa
+
+function seleccionarCelda(td, enfocar = true) {
+  qsa('#lecturas-vista-cuadro td.celda-lectura.sel').forEach((c) => c.classList.remove('sel'));
+  td.classList.add('sel');
+  celdaSeleccionada = td.dataset.key;
+  if (enfocar) qs('#lecturas-vista-cuadro')?.focus({ preventScroll: true });
+  td.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+}
+
+// Navegación estilo Excel: flechas mueven, Enter/F2 abren el modal.
+function manejarTeclasCuadro(evt) {
+  const actual = qs('#lecturas-vista-cuadro td.celda-lectura.sel');
+  if (!actual) return;
+  if (['Enter', 'F2'].includes(evt.key)) { evt.preventDefault(); actual._abrir?.(); return; }
+  const mover = { ArrowUp: [-1, 0], ArrowDown: [1, 0], ArrowLeft: [0, -1], ArrowRight: [0, 1] }[evt.key];
+  if (!mover) return;
+  evt.preventDefault();
+  const fila = actual.parentElement;
+  const tbody = fila.parentElement;
+  const r = [...tbody.rows].indexOf(fila) + mover[0];
+  const c = actual.cellIndex + mover[1];
+  const destino = tbody.rows[r]?.cells[c];
+  if (destino?.classList.contains('celda-lectura')) seleccionarCelda(destino);
+}
+
 async function renderLecturasCuadro() {
   const cont = qs('#lecturas-vista-cuadro');
   if (!cont) return;
@@ -519,25 +547,46 @@ async function renderLecturasCuadro() {
       return;
     }
     const medidoresOrdenados = [...medidores].sort((a, b) => (a.seccion?.nombre ?? '').localeCompare(b.seccion?.nombre ?? '') || (a.codigo_medidor ?? '').localeCompare(b.codigo_medidor ?? ''));
-    const valorPorCelda = new Map(); // `${medidor_id}|${fecha_lectura}` -> lectura_actual
+    const lecturaPorCelda = new Map(); // `${medidor_id}|${fecha_lectura}` -> lectura completa
     const fechasSet = new Set();
     lecturas.forEach((l) => {
       fechasSet.add(l.fecha_lectura);
-      valorPorCelda.set(`${l.medidor_id}|${l.fecha_lectura}`, l.lectura_actual);
+      lecturaPorCelda.set(`${l.medidor_id}|${l.fecha_lectura}`, l);
     });
-    const fechasOrdenadas = [...fechasSet].sort(); // ISO 'YYYY-MM-DD' ordena bien como texto
+    // Filas "manuales": fechas agregadas por el usuario (al estilo Excel) que
+    // todavía no tienen ninguna lectura; viven en memoria hasta guardar una.
+    const extras = fechasExtraPorPropiedad.get(propiedadId) ?? new Set();
+    [...extras].forEach((f) => { if (fechasSet.has(f)) extras.delete(f); });
+    const fechasOrdenadas = [...new Set([...fechasSet, ...extras])].sort(); // ISO ordena bien como texto
 
     cont.innerHTML = '';
+    // Barra superior: agregar una fila con fecha específica + ayuda de uso.
+    const inputFecha = el('input', { type: 'date', style: 'max-width:170px;', title: 'Fecha de la nueva fila' });
+    const agregarFila = () => {
+      const f = inputFecha.value;
+      if (!f) { showToast('Elige la fecha de la nueva fila.', 'error'); return; }
+      if (fechasOrdenadas.includes(f)) { showToast('Esa fecha ya existe en el cuadro.', 'info'); return; }
+      if (!fechasExtraPorPropiedad.has(propiedadId)) fechasExtraPorPropiedad.set(propiedadId, new Set());
+      fechasExtraPorPropiedad.get(propiedadId).add(f);
+      celdaSeleccionada = null;
+      renderLecturasCuadro();
+    };
+    cont.append(el('div', { class: 'grid-bar' }, [
+      el('div', { class: 'grid-bar-add' }, [
+        el('span', { class: 'grid-bar-label' }, '＋ Nueva fila'),
+        inputFecha,
+        el('button', { type: 'button', class: 'btn btn-secondary btn-sm', 'data-admin-only': '', onclick: agregarFila }, 'Agregar fecha'),
+      ]),
+      el('div', { class: 'grid-bar-hint' }, 'Clic = seleccionar celda · Enter o doble clic = registrar/editar lectura · Flechas = moverse'),
+    ]));
     if (!fechasOrdenadas.length) {
-      cont.append(el('p', { style: 'color:var(--gray-500); padding:16px;' }, 'Esta propiedad todavía no tiene lecturas registradas.'));
+      cont.append(el('p', { style: 'color:var(--gray-500); padding:16px;' }, 'Esta propiedad todavía no tiene lecturas. Agrega una fecha para empezar.'));
       return;
     }
     // Cabecera de 3 líneas por medidor: sección/medidor arriba, inquilino
-    // actual al medio (el dato que más se busca a simple vista), código
-    // técnico abajo en gris — así no hay que abrir cada columna para saber
-    // de quién es.
+    // actual al medio, código técnico abajo en gris.
     const thead = el('thead', {}, [el('tr', {}, [
-      el('th', { style: 'position:sticky; left:0; background:var(--gray-100); z-index:1;' }, 'Fecha'),
+      el('th', { style: 'position:sticky; left:0; background:var(--gray-100); z-index:2;' }, 'Fecha'),
       ...medidoresOrdenados.map((m) => {
         const inquilino = m.es_general ? 'Medidor general' : inquilinoDeMedidor(m, inquilinoPorSeccion);
         return el('th', {
@@ -550,14 +599,36 @@ async function renderLecturasCuadro() {
         ]);
       }),
     ])]);
-    const tbody = el('tbody', {}, fechasOrdenadas.map((fecha) => el('tr', {}, [
-      el('td', { style: 'position:sticky; left:0; background:#fff; font-weight:600; white-space:nowrap;' }, formatDate(fecha)),
-      ...medidoresOrdenados.map((m) => {
-        const valor = valorPorCelda.get(`${m.id}|${fecha}`);
-        return el('td', { style: 'text-align:right;' }, valor != null ? formatNumber(valor, 3) : '');
-      }),
-    ])));
-    cont.append(el('table', { class: 'data-table', style: 'font-size:12px;' }, [thead, tbody]));
+    const tbody = el('tbody', {}, fechasOrdenadas.map((fecha) => {
+      const esExtra = extras.has(fecha);
+      const celdaFecha = el('td', { 'data-sort': fecha, style: 'position:sticky; left:0; background:#fff; font-weight:600; white-space:nowrap; z-index:1;' }, [
+        formatDate(fecha),
+        esExtra ? el('span', { class: 'grid-chip-nueva' }, 'nueva') : null,
+        esExtra ? el('button', { type: 'button', class: 'grid-quitar', title: 'Quitar esta fila', onclick: () => { extras.delete(fecha); renderLecturasCuadro(); } }, '×') : null,
+      ]);
+      return el('tr', { class: esExtra ? 'fila-nueva' : '' }, [
+        celdaFecha,
+        ...medidoresOrdenados.map((m) => {
+          const key = `${m.id}|${fecha}`;
+          const lec = lecturaPorCelda.get(key);
+          const td = el('td', { class: 'celda-lectura', style: 'text-align:right;' }, lec ? formatNumber(lec.lectura_actual, 3) : '');
+          td.dataset.key = key;
+          td._abrir = () => (lec ? openLecturaModal(lec) : openLecturaModal(null, { medidor: m, fecha }));
+          td.addEventListener('click', () => seleccionarCelda(td));
+          td.addEventListener('dblclick', () => td._abrir());
+          return td;
+        }),
+      ]);
+    }));
+    const tabla = el('table', { class: 'data-table grid-excel', style: 'font-size:12px;' }, [thead, tbody]);
+    cont.append(tabla);
+    cont.tabIndex = 0;
+    cont.onkeydown = manejarTeclasCuadro;
+    // Restaurar la selección tras un re-render (p.ej. después de guardar).
+    if (celdaSeleccionada) {
+      const prev = [...tabla.querySelectorAll('td.celda-lectura')].find((c) => c.dataset.key === celdaSeleccionada);
+      if (prev) seleccionarCelda(prev, false); else celdaSeleccionada = null;
+    }
   } catch (err) {
     console.error(err);
     cont.innerHTML = '';
@@ -701,7 +772,13 @@ async function fillLecturaMedidorSelect() {
       ? medidoresTodos.filter((m) => m.tipo_servicio_id === tipoServicioId)
       : medidoresTodos;
     sel.innerHTML = '<option value="">Selecciona…</option>';
-    medidores.forEach((m) => sel.append(el('option', { value: m.id }, medidorLabel(m, { conPropiedad: !propiedadId, inquilinoPorSeccion, incluirServicio: false }))));
+    medidores.forEach((m) => {
+      const opt = el('option', { value: m.id }, medidorLabel(m, { conPropiedad: !propiedadId, inquilinoPorSeccion, incluirServicio: false }));
+      opt.dataset.unidad = m.tipo_servicio?.unidad_medida ?? '';
+      opt.dataset.servicio = m.tipo_servicio?.nombre ?? '';
+      opt.dataset.color = colorServicio(m.tipo_servicio?.nombre);
+      sel.append(opt);
+    });
     if (medidores.some((m) => m.id === currentValue)) sel.value = currentValue;
   } catch (err) {
     console.error(err);
@@ -719,7 +796,8 @@ function bindLecturas() {
   qs('#btn-ver-cuadro')?.addEventListener('click', () => { vistaLecturas = vistaLecturas === 'cuadro' ? 'lista' : 'cuadro'; renderLecturas(); });
   qs('#le-propiedad')?.addEventListener('change', fillLecturaMedidorSelect);
   qs('#le-servicio')?.addEventListener('change', fillLecturaMedidorSelect);
-  qs('#le-medidor')?.addEventListener('change', actualizarLecturaAnterior);
+  qs('#le-medidor')?.addEventListener('change', async () => { await actualizarLecturaAnterior(); actualizarResumenLectura(); });
+  ['#le-lectura-actual', '#le-lectura-anterior'].forEach((x) => qs(x)?.addEventListener('input', actualizarResumenLectura));
   qs('#le-fecha-actual')?.addEventListener('change', actualizarLecturaAnterior);
 
   const form = qs('#form-lectura');
@@ -771,20 +849,47 @@ async function actualizarLecturaAnterior() {
     const ultima = await getUltimaLectura(medidorId, fechaActual);
     qs('#le-fecha-anterior').value = ultima?.fecha_lectura ?? '';
     qs('#le-lectura-anterior').value = ultima?.lectura_actual ?? '';
+    actualizarResumenLectura();
   } catch (err) {
     console.error(err);
   }
 }
 
-async function openLecturaModal(lectura = null) {
+// Resumen vivo del modal: chip del medidor elegido + consumo calculado.
+function actualizarResumenLectura() {
+  const sel = qs('#le-medidor');
+  const opt = sel?.selectedOptions?.[0];
+  const chip = qs('#le-resumen');
+  if (chip) {
+    if (opt && opt.value) {
+      chip.style.display = '';
+      chip.style.borderLeftColor = opt.dataset.color || 'var(--color-primary)';
+      chip.innerHTML = '';
+      chip.append(el('div', { class: 'le-chip-serv' }, opt.dataset.servicio || 'Servicio'), el('div', { class: 'le-chip-med' }, opt.textContent));
+    } else chip.style.display = 'none';
+  }
+  const consumo = qs('#le-consumo');
+  if (!consumo) return;
+  const act = qs('#le-lectura-actual').value;
+  const ant = qs('#le-lectura-anterior').value;
+  const unidad = opt?.dataset.unidad ?? '';
+  if (act === '') { consumo.className = 'le-consumo'; consumo.textContent = 'Ingresa la lectura actual para ver el consumo.'; return; }
+  const diff = Number(act) - Number(ant || 0);
+  consumo.className = `le-consumo ${diff < 0 ? 'neg' : 'ok'}`;
+  consumo.textContent = diff < 0
+    ? `⚠ Consumo negativo (${formatNumber(diff, 3)} ${unidad}). Revisa la lectura anterior.`
+    : `Consumo: ${formatNumber(diff, 3)} ${unidad}`;
+}
+
+async function openLecturaModal(lectura = null, preset = null) {
   const form = qs('#form-lectura');
   form.reset();
   form.dataset.editingId = lectura?.id ?? '';
   form.dataset.fotoUrlActual = lectura?.foto_url ?? '';
   qs('#modal-lectura-title').textContent = lectura ? 'Editar lectura' : 'Registrar lectura';
-  qs('#le-propiedad').value = lectura?.medidor?.propiedad_id ?? qs('#filtro-lectura-propiedad')?.value ?? '';
+  qs('#le-propiedad').value = lectura?.medidor?.propiedad_id ?? preset?.medidor?.propiedad_id ?? qs('#filtro-lectura-propiedad')?.value ?? '';
   fillServicioSelect('#le-servicio');
-  qs('#le-servicio').value = lectura?.medidor?.tipo_servicio_id ?? qs('#filtro-lectura-servicio')?.value ?? '';
+  qs('#le-servicio').value = lectura?.medidor?.tipo_servicio_id ?? preset?.medidor?.tipo_servicio_id ?? qs('#filtro-lectura-servicio')?.value ?? '';
   await fillLecturaMedidorSelect();
   if (lectura) {
     qs('#le-medidor').value = lectura.medidor_id;
@@ -793,11 +898,18 @@ async function openLecturaModal(lectura = null) {
     qs('#le-lectura-anterior').value = lectura.lectura_anterior ?? '';
     qs('#le-lectura-actual').value = lectura.lectura_actual;
     qs('#le-notas').value = lectura.notas ?? '';
+  } else if (preset) {
+    // Viene de una celda del cuadro: medidor y fecha ya definidos.
+    qs('#le-medidor').value = preset.medidor.id;
+    qs('#le-fecha-actual').value = preset.fecha;
+    await actualizarLecturaAnterior();
   } else {
     qs('#le-fecha-actual').value = new Date().toISOString().slice(0, 10);
   }
   qs('#le-foto-file').value = '';
+  actualizarResumenLectura();
   openModal('modal-lectura');
+  setTimeout(() => qs('#le-lectura-actual')?.focus(), 80);
 }
 
 /* ============================== RECIBOS GENERALES =============================== */
