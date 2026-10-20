@@ -166,7 +166,7 @@ async function guardar(evt) {
       monto: x.monto,
       fecha_pago: fecha,
       medio_pago: medio,
-      n_operacion: recibo,
+      n_recibo: recibo,
       comprobante_url: urls[0] ?? null,
       foto_cobranza_url: urls[1] ?? null,
       notas,

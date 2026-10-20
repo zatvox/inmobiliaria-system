@@ -601,7 +601,8 @@ export async function listCuotas({ origen = '', estado = '', search = '', propie
     `)
     .order('fecha_vencimiento', { ascending: true });
   if (origen) query = query.eq('origen', origen);
-  if (estado) query = query.eq('estado', estado);
+  if (estado === 'activas') query = query.neq('estado', 'anulada');
+  else if (estado) query = query.eq('estado', estado);
   // Filtro por mes de vencimiento (periodo = 'YYYY-MM') usando rango de fecha
   // — se resuelve en el servidor porque fecha_vencimiento sí es una columna
   // directa de cuotas (a diferencia de propiedad/servicio, que dependen del
@@ -625,19 +626,29 @@ export async function listCuotas({ origen = '', estado = '', search = '', propie
 
   const [alquileres, ventas, detalles] = await Promise.all([
     idsAlquiler.length
-      ? supabase.from('contratos_alquiler').select('id, inquilino:inquilino_id(nombre, telefono), seccion:seccion_id(nombre, propiedad_id, propiedades(nombre_referencial))').in('id', idsAlquiler)
+      ? supabase.from('contratos_alquiler').select('id, inquilino:inquilino_id(nombre, telefono), seccion:seccion_id(nombre, propiedad_id, propiedades(nombre_referencial)), secciones_contrato:contratos_alquiler_secciones(seccion:seccion_id(nombre))').in('id', idsAlquiler)
       : Promise.resolve({ data: [] }),
     idsVenta.length
       ? supabase.from('contratos_venta').select('id, comprador:comprador_id(nombre, telefono), seccion:seccion_id(nombre, propiedad_id, propiedades(nombre_referencial))').in('id', idsVenta)
       : Promise.resolve({ data: [] }),
     idsDetalle.length
-      ? supabase.from('calculo_servicios_detalle').select('id, seccion:seccion_id(nombre, propiedad_id, propiedades(nombre_referencial)), calculo_periodo:calculo_periodo_id(periodo, tipo_servicio_id, tipo_servicio:tipo_servicio_id(nombre)), contrato_alquiler:contrato_alquiler_id(inquilino:inquilino_id(nombre, telefono))').in('id', idsDetalle)
+      ? supabase.from('calculo_servicios_detalle').select('id, seccion:seccion_id(nombre, propiedad_id, propiedades(nombre_referencial)), calculo_periodo:calculo_periodo_id(periodo, tipo_servicio_id, tipo_servicio:tipo_servicio_id(nombre)), contrato_alquiler:contrato_alquiler_id(inquilino:inquilino_id(nombre, telefono), seccion:seccion_id(nombre), secciones_contrato:contratos_alquiler_secciones(seccion:seccion_id(nombre)))').in('id', idsDetalle)
       : Promise.resolve({ data: [] }),
   ]);
 
   const mapAlquiler = new Map((alquileres.data ?? []).map((a) => [a.id, a]));
   const mapVenta = new Map((ventas.data ?? []).map((v) => [v.id, v]));
   const mapDetalle = new Map((detalles.data ?? []).map((d) => [d.id, d]));
+
+  // Un contrato puede cubrir varias secciones (ampliación por adenda, ej.
+  // Piso 4 + Piso 5): se listan todas, sin repetir y con la principal primero.
+  function nombresSeccionesContrato(contrato, nombrePrincipal) {
+    const nombres = [];
+    const add = (n) => { if (n && !nombres.includes(n)) nombres.push(n); };
+    add(nombrePrincipal ?? contrato?.seccion?.nombre);
+    (contrato?.secciones_contrato ?? []).forEach((sc) => add(sc.seccion?.nombre));
+    return nombres.join(' + ') || '';
+  }
 
   const enriched = data.map((c) => {
     let deudor = '—', referencia = '—', propId = null, tipoServId = null, telefono = null;
@@ -646,7 +657,7 @@ export async function listCuotas({ origen = '', estado = '', search = '', propie
       deudor = a?.inquilino?.nombre ?? '—';
       telefono = a?.inquilino?.telefono ?? null;
       propId = a?.seccion?.propiedad_id ?? null;
-      referencia = a ? `${a.seccion?.propiedades?.nombre_referencial ?? ''} · ${a.seccion?.nombre ?? ''}` : '—';
+      referencia = a ? `${a.seccion?.propiedades?.nombre_referencial ?? ''} · ${nombresSeccionesContrato(a, a.seccion?.nombre)}` : '—';
     } else if (c.origen === 'venta') {
       const v = mapVenta.get(c.contrato_id);
       deudor = v?.comprador?.nombre ?? '—';
@@ -659,7 +670,7 @@ export async function listCuotas({ origen = '', estado = '', search = '', propie
       telefono = d?.contrato_alquiler?.inquilino?.telefono ?? null;
       propId = d?.seccion?.propiedad_id ?? null;
       tipoServId = d?.calculo_periodo?.tipo_servicio_id ?? null;
-      referencia = d ? `${d.seccion?.propiedades?.nombre_referencial ?? ''} · ${d.seccion?.nombre ?? ''} · ${d.calculo_periodo?.tipo_servicio?.nombre ?? ''}` : '—';
+      referencia = d ? `${d.seccion?.propiedades?.nombre_referencial ?? ''} · ${nombresSeccionesContrato(d.contrato_alquiler, d.seccion?.nombre)} · ${d.calculo_periodo?.tipo_servicio?.nombre ?? ''}` : '—';
     }
     const totalPagado = (c.pagos ?? []).filter((p) => p.estado !== 'anulado').reduce((s, p) => s + Number(p.monto), 0);
     return { ...c, deudor, telefono, referencia, propiedadId: propId, tipoServicioId: tipoServId, totalPagado, saldo: Number(c.monto) + Number(c.mora_aplicada) - totalPagado };
@@ -948,7 +959,7 @@ export async function listCuotasPorInquilino({ inquilinoId, soloConDeuda = true 
 export async function getCuota(id) {
   const { data, error } = await supabase
     .from('cuotas')
-    .select('*, pagos(id, monto, fecha_pago, medio_pago, n_operacion, estado, comprobante_url, foto_cobranza_url, notas, created_at)')
+    .select('*, pagos(id, monto, fecha_pago, medio_pago, n_recibo, n_operacion, estado, comprobante_url, foto_cobranza_url, notas, created_at)')
     .eq('id', id).single();
   if (error) throw error;
   return data;

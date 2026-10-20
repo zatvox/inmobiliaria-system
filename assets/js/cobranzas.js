@@ -23,6 +23,14 @@ let tiposServicioCache = [];
 
 const ORIGEN_LABELS = { alquiler: 'Alquiler', venta: 'Venta', servicio: 'Servicio' };
 
+// Quita el nombre del inmueble del inicio de la referencia (solo visual).
+function refSinInmueble(ref) {
+  const r = ref ?? '';
+  const p = propiedadesCache.find((x) => x.nombre_referencial && r.startsWith(x.nombre_referencial));
+  if (!p) return r;
+  return r.slice(p.nombre_referencial.length).replace(/^\s*[·\-–]\s*/, '') || r;
+}
+
 function periodoActual() {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
@@ -169,7 +177,7 @@ function renderRow(c) {
   const concepto = `${ORIGEN_LABELS[c.origen] ?? c.origen}${c.concepto ? ' · ' + c.concepto : ''}`;
   return el('tr', {}, [
     el('td', {}, c.deudor),
-    el('td', {}, c.referencia),
+    el('td', {}, refSinInmueble(c.referencia)),
     el('td', {}, concepto),
     el('td', {}, formatCurrency(Number(c.monto) + Number(c.mora_aplicada))),
     el('td', {}, [el('span', { style: c.saldo > 0 ? 'color:var(--color-danger); font-weight:600;' : 'color:var(--color-success); font-weight:600;' }, formatCurrency(c.saldo))]),
@@ -246,7 +254,8 @@ async function openPagoModal(cuota) {
   qs('#pg-monto').max = cuota.saldo.toFixed(2);
   qs('#pg-fecha').value = new Date().toISOString().slice(0, 10);
   qs('#pg-comprobante-file').value = '';
-  qs('#pg-foto-file').value = '';
+  qs('#pg-recibo-file').value = '';
+  qs('#pg-recibo').value = '';
 
   const medioSelect = qs('#pg-medio');
   medioSelect.innerHTML = '';
@@ -270,7 +279,7 @@ function bindFormPago() {
     try {
       let comprobanteUrl = null, fotoUrl = null;
       const comprobanteFile = qs('#pg-comprobante-file').files[0];
-      const fotoFile = qs('#pg-foto-file').files[0];
+      const fotoFile = qs('#pg-recibo-file').files[0];
       if (comprobanteFile) comprobanteUrl = await uploadArchivo(comprobanteFile, `pagos/${cuotaId}`);
       if (fotoFile) fotoUrl = await uploadArchivo(fotoFile, `pagos/${cuotaId}`);
 
@@ -279,7 +288,8 @@ function bindFormPago() {
         monto: Number(qs('#pg-monto').value),
         fecha_pago: qs('#pg-fecha').value,
         medio_pago: qs('#pg-medio').value,
-        n_operacion: qs('#pg-operacion').value || null,
+        n_recibo: qs('#pg-recibo').value.trim() || null,
+        n_operacion: qs('#pg-operacion').value.trim() || null,
         comprobante_url: comprobanteUrl,
         foto_cobranza_url: fotoUrl,
         notas: qs('#pg-notas').value || null,
@@ -374,7 +384,7 @@ function renderAbonos() {
     && (!medio || p.medio_pago === medio)
     && (!estado || p.estado === estado)
     && (!periodo || (p.fecha_pago ?? '').startsWith(periodo))
-    && (!q || [p.deudor, p.referencia, p.concepto, p.n_operacion, p.notas].some((v) => (v ?? '').toLowerCase().includes(q))));
+    && (!q || [p.deudor, p.referencia, p.concepto, p.n_recibo, p.n_operacion, p.notas].some((v) => (v ?? '').toLowerCase().includes(q))));
   const validos = rows.filter((p) => p.estado !== 'anulado');
   qs('#ab-count').textContent = rows.length;
   qs('#ab-total').textContent = formatCurrency(validos.reduce((s, p) => s + Number(p.monto), 0));
@@ -382,7 +392,7 @@ function renderAbonos() {
   const tbody = qs('#ab-tbody');
   tbody.innerHTML = '';
   if (!rows.length) {
-    tbody.append(el('tr', {}, [el('td', { colspan: '12' }, [el('div', { class: 'vacio-pro' }, [el('div', { style: 'font-size:32px;' }, '🧾'), el('p', {}, 'No hay abonos para este filtro.')])])]));
+    tbody.append(el('tr', {}, [el('td', { colspan: '13' }, [el('div', { class: 'vacio-pro' }, [el('div', { style: 'font-size:32px;' }, '🧾'), el('p', {}, 'No hay abonos para este filtro.')])])]));
     return;
   }
   rows.forEach((p) => tbody.append(filaAbono(p)));
@@ -399,10 +409,11 @@ function filaAbono(p) {
   return el('tr', { style: p.estado === 'anulado' ? 'opacity:.55;' : '' }, [
     el('td', { style: 'white-space:nowrap;' }, formatDate(p.fecha_pago, { day: '2-digit', month: '2-digit', year: 'numeric' })),
     el('td', {}, p.deudor),
-    el('td', {}, p.referencia),
+    el('td', {}, refSinInmueble(p.referencia)),
     el('td', {}, `${ORIGEN_LABELS[p.origen] ?? p.origen}${p.concepto ? ' · ' + p.concepto : ''}`),
     el('td', { style: 'font-weight:600; white-space:nowrap;' }, formatCurrency(p.monto)),
     el('td', {}, p.medio_pago),
+    el('td', {}, p.n_recibo ?? '—'),
     el('td', {}, p.n_operacion ?? '—'),
     el('td', { html: badgeHtml(p.estado) }),
     el('td', { style: 'white-space:nowrap;' }, docs.length ? docs : '—'),
@@ -438,9 +449,10 @@ async function openEditarAbono(p) {
   qs('#ea-hint').textContent = `Máximo: ${formatCurrency(maximo)}`;
   qs('#ea-fecha').value = p.fecha_pago ?? '';
   qs('#ea-operacion').value = p.n_operacion ?? '';
+  qs('#ea-recibo').value = p.n_recibo ?? '';
   qs('#ea-notas').value = p.notas ?? '';
   qs('#ea-voucher-actual').textContent = p.comprobante_url ? 'Ya tiene voucher; sube uno nuevo para reemplazarlo.' : 'Sin voucher.';
-  qs('#ea-foto-actual').textContent = p.foto_cobranza_url ? 'Ya tiene foto; sube una nueva para reemplazarla.' : 'Sin foto.';
+  qs('#ea-foto-actual').textContent = p.foto_cobranza_url ? 'Ya tiene archivo de recibo; sube uno nuevo para reemplazarlo.' : 'Sin archivo de recibo.';
   const sel = qs('#ea-medio');
   sel.innerHTML = '';
   try {
@@ -467,6 +479,7 @@ function bindEditarAbono() {
         monto,
         fecha_pago: qs('#ea-fecha').value,
         medio_pago: qs('#ea-medio').value,
+        n_recibo: qs('#ea-recibo').value.trim() || null,
         n_operacion: qs('#ea-operacion').value.trim() || null,
         notas: qs('#ea-notas').value.trim() || null,
       };
@@ -549,7 +562,7 @@ function renderPagoItem(p, cuotaId) {
       el('strong', {}, formatCurrency(p.monto)),
       el('span', { html: badgeHtml(p.estado) }),
     ]),
-    el('div', { style: 'font-size:12px; color:var(--gray-500); margin:4px 0;' }, `${formatDate(p.fecha_pago)} · ${p.medio_pago}${p.n_operacion ? ' · Op: ' + p.n_operacion : ''}`),
+    el('div', { style: 'font-size:12px; color:var(--gray-500); margin:4px 0;' }, `${formatDate(p.fecha_pago)} · ${p.medio_pago}${p.n_recibo ? ' · Rec: ' + p.n_recibo : ''}${p.n_operacion ? ' · Op: ' + p.n_operacion : ''}`),
     p.comprobante_url ? el('a', { href: '#', style: 'font-size:12px;', onclick: async (evt) => { evt.preventDefault(); window.open(await getSignedUrl(p.comprobante_url), '_blank'); } }, '📎 Ver comprobante') : null,
     ' ',
     p.foto_cobranza_url ? el('a', { href: '#', style: 'font-size:12px;', onclick: async (evt) => { evt.preventDefault(); window.open(await getSignedUrl(p.foto_cobranza_url), '_blank'); } }, '📷 Ver foto de cobranza') : null,

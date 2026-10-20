@@ -39,6 +39,13 @@ function preseleccionarPropiedadLecturas() {
   if (propDefault) sel.value = propDefault.id;
 }
 
+// 'YYYY-MM' → mes anterior ('2026-01' → '2025-12').
+function periodoAnterior(periodo) {
+  const [y, m] = periodo.split('-').map(Number);
+  const d = new Date(y, m - 2, 1);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+}
+
 function periodoActual() {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
@@ -1183,7 +1190,34 @@ async function buscarRecibosCalculo() {
     ]);
     const recibosDelPeriodo = recibos.filter((r) => r.tipo_servicio_id === tipoServicioId && r.periodo === periodo);
     if (!recibosDelPeriodo.length) {
-      contenedor.innerHTML = `<div class="card"><p>No hay ningún recibo general registrado para <strong>${tipoServicio?.nombre}</strong> en el periodo <strong>${periodo}</strong>. Regístralo primero en la pestaña "Recibos generales".</p></div>`;
+      // Sin recibo del periodo: se estima con el recibo del mes anterior,
+      // solo para ver importes (no se guarda ni se genera cobranza).
+      const periodoPrev = periodoAnterior(periodo);
+      const recibosPrev = recibos.filter((r) => r.tipo_servicio_id === tipoServicioId && r.periodo === periodoPrev);
+      if (!recibosPrev.length) {
+        contenedor.innerHTML = `<div class="card"><p>No hay ningún recibo general registrado para <strong>${tipoServicio?.nombre}</strong> en el periodo <strong>${periodo}</strong> (ni en el mes anterior <strong>${periodoPrev}</strong> para estimar). Regístralo primero en la pestaña "Recibos generales".</p></div>`;
+        return;
+      }
+      contenedor.innerHTML = '';
+      const totalPrev = recibosPrev.reduce((s, r) => s + Number(r.monto_total_recibo ?? 0), 0);
+      contenedor.append(el('div', {
+        style: 'background:#FEF3C7; border:1px solid #F59E0B; color:#92400E; border-radius:8px; padding:12px 16px; margin-bottom:12px;',
+      }, [
+        el('strong', {}, 'Cálculo ESTIMADO — solo referencial. '),
+        `Aún no hay recibo general de ${tipoServicio?.nombre} para ${periodo}; se usa el recibo de ${periodoPrev} (${formatCurrency(totalPrev)}${recibosPrev.length > 1 ? ` en ${recibosPrev.length} cuentas` : ''}) con las lecturas de ${periodo}. `,
+        'No se puede guardar el cálculo ni generar cobranzas hasta registrar el recibo del periodo en "Recibos generales".',
+      ]));
+      for (const recibo of recibosPrev) {
+        const card = el('div', { class: 'card', style: 'margin-bottom:12px;' }, [
+          el('p', { style: 'margin-bottom:8px;' }, [
+            el('strong', {}, recibo.cuenta_servicio ? `Cuenta ${recibo.cuenta_servicio.codigo}${recibo.cuenta_servicio.nombre && recibo.cuenta_servicio.nombre !== recibo.cuenta_servicio.codigo ? ' · ' + recibo.cuenta_servicio.nombre : ''}` : 'Cuenta única de la propiedad'),
+            ` — recibo ${periodoPrev}: ${formatCurrency(recibo.monto_total_recibo)}${recibo.precio_unitario ? ' · precio unit. ' + formatNumber(recibo.precio_unitario, 4) : ''}`,
+          ]),
+          el('div', { id: `calculo-detalle-${recibo.id}` }),
+        ]);
+        contenedor.append(card);
+        await cargarDetalleRecibo(recibo, tipoServicio, { estimado: true });
+      }
       return;
     }
     const calculadosIds = new Set(calculos.filter((c) => c.tipo_servicio_id === tipoServicioId && c.periodo === periodo).map((c) => c.recibo_general_id));
@@ -1290,7 +1324,7 @@ async function generarCobranzas(propiedadId, tipoServicioId, periodo, tipoServic
   }
 }
 
-async function cargarDetalleRecibo(recibo, tipoServicio) {
+async function cargarDetalleRecibo(recibo, tipoServicio, { estimado = false } = {}) {
   const propiedadId = qs('#ca-propiedad').value;
   const tipoServicioId = qs('#ca-tipo-servicio').value;
   const periodo = qs('#ca-periodo').value;
@@ -1366,6 +1400,7 @@ async function cargarDetalleRecibo(recibo, tipoServicio) {
           metodoLabel: `Medidor compartido (${m.codigo_medidor || 'sin código'}, ${r.porcentaje}%)`,
           consumoLabel: `${formatNumber(consumoProrateado, 3)} ${tipoServicio?.unidad_medida ?? ''} (de ${formatNumber(lectura.consumo_calculado, 3)} total)`,
           consumo: consumoProrateado, ok: true, esMedidor: true, detalleIndex: idx,
+          seccionId: r.seccion_id, lectura, medidor: m,
         });
       });
     }
@@ -1403,6 +1438,7 @@ async function cargarDetalleRecibo(recibo, tipoServicio) {
             seccionNombre: s.nombre, inquilinoNombre: inquilinoPorSeccion.get(s.id) ?? '—', metodoLabel: etiquetaMedidor,
             consumoLabel: `${formatNumber(lectura.consumo_calculado, 3)} ${tipoServicio?.unidad_medida ?? ''}`,
             consumo: Number(lectura.consumo_calculado), ok: true, esMedidor: true, detalleIndex: idx,
+            seccionId: s.id, lectura, medidor: medidorDeEstaCuenta,
           });
         }
       } else if (seccionesCubiertasPorCompartido.has(s.id)) {
@@ -1418,14 +1454,14 @@ async function cargarDetalleRecibo(recibo, tipoServicio) {
         const montoFijo = buscarMontoFijoSeccion(s.id, tipoServicioId);
         const idx = detalle.length;
         detalle.push({ seccion_id: s.id, metodo: 'monto_fijo', n_personas: 1, tarifa_por_persona: montoFijo });
-        filasInfo.push({ seccionNombre: s.nombre, inquilinoNombre: inquilinoPorSeccion.get(s.id) ?? '—', metodoLabel: 'Monto fijo (contrato)', ok: true, esMedidor: false, esMontoFijo: true, detalleIndex: idx });
+        filasInfo.push({ seccionNombre: s.nombre, inquilinoNombre: inquilinoPorSeccion.get(s.id) ?? '—', metodoLabel: 'Monto fijo (contrato)', ok: true, esMedidor: false, esMontoFijo: true, detalleIndex: idx, seccionId: s.id });
       } else if (!cuentaId && tipoServicio?.permite_tarifa_fija_por_persona) {
         // Tarifa fija solo aplica cuando la propiedad tiene una sola cuenta
         // por servicio — con varias cuentas no hay forma de saber a cuál
         // pertenece una sección sin medidor propio.
         const idx = detalle.length;
         detalle.push({ seccion_id: s.id, metodo: 'tarifa_fija_por_persona', n_personas: 1, tarifa_por_persona: Number(tipoServicio.tarifa_por_persona_default ?? 0) });
-        filasInfo.push({ seccionNombre: s.nombre, inquilinoNombre: inquilinoPorSeccion.get(s.id) ?? '—', metodoLabel: 'Tarifa fija por persona', ok: true, esMedidor: false, detalleIndex: idx });
+        filasInfo.push({ seccionNombre: s.nombre, inquilinoNombre: inquilinoPorSeccion.get(s.id) ?? '—', metodoLabel: 'Tarifa fija por persona', ok: true, esMedidor: false, detalleIndex: idx, seccionId: s.id });
       } else if (!cuentaId) {
         filasInfo.push({ seccionNombre: s.nombre, inquilinoNombre: inquilinoPorSeccion.get(s.id) ?? '—', metodoLabel: 'No prorrateable', ok: false, detalleIndex: null });
       }
@@ -1537,7 +1573,55 @@ async function cargarDetalleRecibo(recibo, tipoServicio) {
         const item = f.detalleIndex != null ? detalle[f.detalleIndex] : null;
         return s + (f.esMedidor ? f.consumo * precioDeFila(f) : (item?.n_personas ?? 0) * (item?.tarifa_por_persona ?? 0));
       }, 0);
-      totalEl.textContent = `Total de esta cuenta: ${formatCurrency(totalCalc)}`;
+      totalEl.textContent = `Total de esta cuenta${estimado ? ' (estimado)' : ''}: ${formatCurrency(totalCalc)}`;
+      if (estimado) renderCuadrosEstimados();
+    }
+
+    // Modo estimado: los cuadros se arman en memoria con las lecturas del
+    // periodo y el precio del recibo anterior — nada se guarda en la BD.
+    const cuadrosWrap = el('div', { style: 'margin-top:16px;' });
+    const colorLineasEst = estimado ? await getColorLineasTabla() : null;
+    const propiedadNombreEst = qs('#ca-propiedad')?.selectedOptions?.[0]?.textContent?.trim() ?? '—';
+    function renderCuadrosEstimados() {
+      const grupos = new Map();
+      for (const f of filasInfo) {
+        if (!f.ok) continue;
+        const item = f.detalleIndex != null ? detalle[f.detalleIndex] : null;
+        if (!grupos.has(f.seccionId)) {
+          grupos.set(f.seccionId, {
+            seccionId: f.seccionId, seccionNombre: f.seccionNombre, propiedadNombre: propiedadNombreEst,
+            inquilinoNombre: f.inquilinoNombre && f.inquilinoNombre !== '—' ? f.inquilinoNombre : null,
+            tipoServicioNombre: tipoServicio?.nombre ?? 'Servicio', unidadMedida: tipoServicio?.unidad_medida ?? '',
+            periodo: `${periodo} (ESTIMADO)`, filas: [], total: 0,
+          });
+        }
+        const g = grupos.get(f.seccionId);
+        const codigo = f.medidor?.codigo_medidor || recibo.cuenta_servicio?.codigo || '—';
+        let subtotal; let fila;
+        if (f.esMedidor) {
+          const precio = precioDeFila(f);
+          subtotal = Math.round(f.consumo * precio * 100) / 100;
+          fila = {
+            etiqueta: codigo, codigo, seccionNombre: f.seccionNombre, metodo: 'medidor',
+            fechaLecturaAnterior: f.lectura?.fecha_lectura_anterior ?? null, fechaLectura: f.lectura?.fecha_lectura ?? null,
+            lecturaAnterior: f.lectura?.lectura_anterior ?? null, lecturaActual: f.lectura?.lectura_actual ?? null,
+            consumo: f.consumo, precioUnitario: precio, subtotal,
+          };
+        } else {
+          subtotal = Math.round((item?.n_personas ?? 0) * (item?.tarifa_por_persona ?? 0) * 100) / 100;
+          fila = {
+            etiqueta: codigo, codigo, seccionNombre: f.seccionNombre, metodo: item?.metodo,
+            nPersonas: item?.n_personas, tarifaPorPersona: item?.tarifa_por_persona, subtotal,
+          };
+        }
+        g.filas.push(fila);
+        g.total += subtotal;
+      }
+      cuadrosWrap.innerHTML = '';
+      cuadrosWrap.append(el('div', { style: 'font-weight:600; margin-bottom:8px;' }, 'Vista previa estimada: cuadros por inquilino'));
+      [...grupos.values()].forEach((g) => {
+        cuadrosWrap.append(el('div', { style: 'margin-bottom:16px;' }, [buildCuadroConsumoEl(g, { colorLineas: colorLineasEst })]));
+      });
     }
 
     // Menú "⋮" (esquina superior derecha de la tabla) para ocultar/mostrar
@@ -1586,10 +1670,11 @@ async function cargarDetalleRecibo(recibo, tipoServicio) {
       ]),
       tablaWrap,
       totalEl,
+      ...(estimado ? [cuadrosWrap] : []),
     );
     renderTabla();
 
-    if (detalle.length) {
+    if (detalle.length && !estimado) {
       const btnConfirmar = el('button', { class: 'btn btn-primary btn-sm', style: 'margin-top:12px;', 'data-admin-only': '' }, 'Confirmar cálculo de esta cuenta');
       btnConfirmar.addEventListener('click', () => {
         // Antes de enviar, se fija en cada ítem de medidor el precio con el
