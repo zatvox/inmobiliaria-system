@@ -13,6 +13,7 @@ import {
   listCuotasAlquilerPendientes, actualizarMontoCuotasAlquilerPendientes,
   planCronogramaAlquiler, aplicarCronogramaAlquiler,
 } from './supabase-data.js';
+import { abrirGenerarContrato } from './contrato-ui.js';
 import { qs, qsa, el, formatCurrency, formatDate, badgeHtml, showToast, openModal, closeModal, validateForm, setLoading, debounce, confirmAction } from './utils.js';
 
 let profile = null;
@@ -22,6 +23,12 @@ let tiposServicioCache = [];
 // las disponibles + (si se está editando) las que ya tiene ese contrato,
 // aunque ya no figuren como "disponibles" en la tabla secciones.
 let seccionesAlquilerCache = [];
+// Datos del documento de contrato (renovación, garantía, firma…): se guardan
+// en contratos_alquiler.datos_contrato (SQL 27) y los usa contrato-ui.js.
+let docBase = {};          // lo ya guardado/copiado; el modal solo pisa lo que edita
+let docAbonos = [];        // [{ monto, recibo }]
+let inquilinosCache = [];
+let contratosPrevCache = [];
 
 async function main() {
   profile = await initShell('contratos');
@@ -100,6 +107,7 @@ function renderRowAlquiler(c) {
     el('td', {}, `${formatDate(c.fecha_inicio)} → ${c.fecha_fin ? formatDate(c.fecha_fin) : 'indefinido'}`),
     el('td', { html: badgeHtml(c.estado) }),
     el('td', { class: 'actions' }, [
+      el('button', { class: 'btn btn-tertiary btn-sm', title: 'Generar el documento del contrato (Word / PDF)', onclick: () => abrirGenerarContrato(c.id) }, '📄 Contrato'),
       el('button', { class: 'btn btn-tertiary btn-sm', 'data-admin-only': '', onclick: () => editAlquiler(c.id) }, 'Editar'),
     ]),
   ]);
@@ -130,12 +138,15 @@ async function openAlquilerModal(contrato = null) {
   form.dataset.originalDiaVenc = contrato ? String(contrato.dia_vencimiento ?? '') : '';
   form.dataset.originalEstado = contrato?.estado ?? '';
 
-  const [secciones, inquilinos, agentes, avales] = await Promise.all([
+  const [secciones, inquilinos, agentes, avales, contratosPrev] = await Promise.all([
     listSeccionesDisponibles({ paraVenta: false }),
     listPersonas({ rol: 'inquilino' }),
     listPersonas({ rol: 'agente' }),
     listPersonas({ rol: 'aval' }),
+    listContratosAlquiler({}),
   ]);
+  inquilinosCache = inquilinos;
+  contratosPrevCache = contratosPrev;
 
   // Las secciones que este contrato ya tiene (al editar) deben poder elegirse
   // aunque ya no figuren como "disponibles" — se agregan a la lista si faltan.
@@ -213,7 +224,139 @@ async function openAlquilerModal(contrato = null) {
     agregarFilaSeccion({ fechaInicio: '', existente: false });
   }
   actualizarTotalRenta();
+  docBase = contrato?.datos_contrato && typeof contrato.datos_contrato === 'object' ? JSON.parse(JSON.stringify(contrato.datos_contrato)) : {};
+  llenarCamposDoc();
+  poblarContratosPrevios();
+  qs('#al-doc-details').open = !!docBase.renovacion?.es;
   openModal('modal-alquiler');
+}
+
+/* ---------- Datos para el documento (renovación / garantía / firma) ---------- */
+const esEmpresa = (p) => p?.tipo_documento === 'RUC' || /^(10|15|17|20)\d{9}$/.test(p?.dni_ruc ?? '');
+const mergeDeep = (base, extra) => {
+  if (extra === undefined || extra === null) return base;
+  if (Array.isArray(base) || Array.isArray(extra) || typeof base !== 'object' || typeof extra !== 'object' || base === null) return extra;
+  const out = { ...base };
+  Object.keys(extra).forEach((k) => { out[k] = mergeDeep(base[k], extra[k]); });
+  return out;
+};
+
+function pintarAbonosDoc() {
+  const cont = qs('#al-doc-abonos');
+  cont.innerHTML = '';
+  docAbonos.forEach((a, i) => {
+    const monto = el('input', { type: 'number', step: '0.01', min: '0', placeholder: 'Monto', value: a.monto ?? '', style: 'width:130px;' });
+    const recibo = el('input', { type: 'text', placeholder: 'N° de recibo', value: a.recibo ?? '', style: 'flex:1;' });
+    monto.addEventListener('input', () => { a.monto = monto.value; resumenAbonosDoc(); });
+    recibo.addEventListener('input', () => { a.recibo = recibo.value; });
+    cont.append(el('div', { style: 'display:flex; gap:8px; align-items:center; margin-bottom:6px;' }, [
+      monto, recibo, el('button', { type: 'button', class: 'btn btn-tertiary btn-sm', onclick: () => { docAbonos.splice(i, 1); pintarAbonosDoc(); } }, '✕'),
+    ]));
+  });
+  resumenAbonosDoc();
+}
+
+function resumenAbonosDoc() {
+  const dep = Number(qs('#al-deposito').value) || 0;
+  const suma = docAbonos.reduce((s, a) => s + (Number(a.monto) || 0), 0);
+  const r = qs('#al-doc-abonos-resumen');
+  if (!docAbonos.length) { r.textContent = dep ? `Garantía pactada: ${formatCurrency(dep)}. Sin abonos registrados.` : ''; return; }
+  const saldo = Math.round((dep - suma) * 100) / 100;
+  r.textContent = `Abonado ${formatCurrency(suma)}${dep ? ` de ${formatCurrency(dep)} — ${Math.abs(saldo) < 0.005 ? 'garantía completa ✓' : (saldo > 0 ? `saldo pendiente ${formatCurrency(saldo)}` : `excede en ${formatCurrency(-saldo)}`)}` : ''}`;
+}
+
+function actualizarVisibilidadDoc() {
+  const renov = qs('#al-doc-tipo').value === 'renovacion';
+  qs('#al-doc-prev-wrap').style.display = renov ? 'block' : 'none';
+  qs('#al-doc-anterior-wrap').style.display = renov ? 'block' : 'none';
+  const persona = inquilinosCache.find((p) => p.id === qs('#al-inquilino').value);
+  qs('#al-doc-rep-wrap').style.display = esEmpresa(persona) ? 'block' : 'none';
+}
+
+function llenarCamposDoc() {
+  const d = docBase ?? {};
+  qs('#al-doc-tipo').value = d.renovacion?.es ? 'renovacion' : 'nuevo';
+  qs('#al-doc-fecha-anterior').value = d.renovacion?.fechaAnterior ?? '';
+  qs('#al-doc-fecha-firma').value = d.fechaFirma ?? '';
+  qs('#al-doc-uso').value = d.uso ?? 'comercial';
+  qs('#al-doc-aumento').value = d.aumentoPct ?? '';
+  qs('#al-doc-modalidad').value = d.garantia?.modalidad ?? '';
+  qs('#al-doc-penalidad').value = d.penalidadDiaria ?? '';
+  qs('#al-doc-rep-trat').value = d.inq?.repTratamiento ?? 'el Sr.';
+  qs('#al-doc-rep-nombre').value = d.inq?.repNombre ?? '';
+  qs('#al-doc-rep-cargo').value = d.inq?.repCargo ?? '';
+  qs('#al-doc-partida').value = d.inq?.partida ?? '';
+  qs('#al-doc-oficina').value = d.inq?.oficinaRegistral ?? '';
+  docAbonos = (d.garantia?.abonos ?? []).map((a) => ({ ...a }));
+  pintarAbonosDoc();
+  actualizarVisibilidadDoc();
+}
+
+/** Campos del modal → objeto para datos_contrato (conserva lo demás ya guardado). */
+function recogerDatosDoc() {
+  const v = (id) => qs(id).value.trim();
+  const patch = {
+    renovacion: { es: qs('#al-doc-tipo').value === 'renovacion', fechaAnterior: v('#al-doc-fecha-anterior') },
+    fechaFirma: v('#al-doc-fecha-firma'),
+    uso: qs('#al-doc-uso').value,
+    garantia: { modalidad: v('#al-doc-modalidad'), abonos: docAbonos.filter((a) => Number(a.monto) > 0).map((a) => ({ monto: Number(a.monto), recibo: (a.recibo ?? '').trim() })) },
+    inq: { repTratamiento: qs('#al-doc-rep-trat').value, repNombre: v('#al-doc-rep-nombre'), repCargo: v('#al-doc-rep-cargo'), partida: v('#al-doc-partida'), oficinaRegistral: v('#al-doc-oficina') },
+  };
+  if (v('#al-doc-aumento') !== '') patch.aumentoPct = Number(v('#al-doc-aumento'));
+  if (v('#al-doc-penalidad') !== '') patch.penalidadDiaria = Number(v('#al-doc-penalidad'));
+  return mergeDeep(docBase ?? {}, patch);
+}
+
+/** Renovación: copia al formulario lo del contrato anterior (editable después). */
+async function prellenarDesdeAnterior(prevId) {
+  if (!prevId) return;
+  try {
+    const prev = await getContratoAlquiler(prevId);
+    const d = prev.datos_contrato ?? {};
+    docBase = mergeDeep(d, {});
+    delete docBase.fechaFirma;
+    docBase.renovacion = { es: true, fechaAnterior: prev.fecha_inicio ?? '' };
+    llenarCamposDoc();
+    qs('#al-doc-tipo').value = 'renovacion';
+    actualizarVisibilidadDoc();
+    if (!qs('#al-deposito').value && prev.deposito_garantia) qs('#al-deposito').value = prev.deposito_garantia;
+    if (!qs('#al-dia-venc').value && prev.dia_vencimiento) qs('#al-dia-venc').value = prev.dia_vencimiento;
+    if (!qs('#al-fecha-inicio').value && prev.fecha_fin) qs('#al-fecha-inicio').value = prev.fecha_fin;
+    if (prev.aval_id && !qs('#al-tiene-aval').checked) {
+      qs('#al-tiene-aval').checked = true; qs('#al-aval-field').style.display = 'block'; qs('#al-aval').value = prev.aval_id;
+    }
+    if (!qs('#al-servicios-fijos-list').children.length) (prev.servicios_fijos ?? []).forEach((sf) => agregarFilaServicioFijo(sf.tipo_servicio_id, sf.monto_fijo));
+    if (!qs('#al-ocupantes').value && prev.n_ocupantes) qs('#al-ocupantes').value = prev.n_ocupantes;
+    pintarAbonosDoc();
+    showToast('Datos copiados del contrato anterior. Revisa fechas, renta y abonos.', 'info');
+  } catch (err) {
+    console.error(err);
+    showToast('No se pudo leer el contrato anterior.', 'error');
+  }
+}
+
+function poblarContratosPrevios() {
+  const sel = qs('#al-doc-prev');
+  const inq = qs('#al-inquilino').value;
+  sel.innerHTML = '<option value="">Selecciona…</option>';
+  contratosPrevCache
+    .filter((c) => (!inq || c.inquilino?.id === inq) && c.id !== qs('#form-alquiler').dataset.editingId)
+    .forEach((c) => sel.append(el('option', { value: c.id }, `${c.seccion?.propiedades?.nombre_referencial ?? ''} · ${c.seccion?.nombre ?? ''} (${formatDate(c.fecha_inicio)} → ${c.fecha_fin ? formatDate(c.fecha_fin) : 'indef.'})`)));
+}
+
+/** Guarda; si la columna datos_contrato aún no existe (SQL 27), reintenta sin ella. */
+async function guardarConFallbackDatos(fn, payload) {
+  try {
+    return await fn(payload);
+  } catch (err) {
+    if (payload.datos_contrato && /datos_contrato/.test(err?.message ?? '')) {
+      const { datos_contrato: _omitido, ...sinDatos } = payload;
+      const res = await fn(sinDatos);
+      showToast('Contrato guardado, pero los datos del documento no: ejecuta el SQL 27 (assets/sql/27_migrations-contrato-datos.sql) en Supabase.', 'warning', 8000);
+      return res;
+    }
+    throw err;
+  }
 }
 
 /* ---------- Secciones del contrato (multi-sección + adenda) ---------- */
@@ -286,6 +429,11 @@ function bindFormAlquiler() {
   });
   qs('#btn-agregar-servicio-fijo')?.addEventListener('click', () => agregarFilaServicioFijo());
   qs('#btn-agregar-seccion')?.addEventListener('click', () => agregarFilaSeccion());
+  qs('#btn-doc-add-abono')?.addEventListener('click', () => { docAbonos.push({ monto: '', recibo: '' }); pintarAbonosDoc(); });
+  qs('#al-doc-tipo')?.addEventListener('change', () => { actualizarVisibilidadDoc(); if (qs('#al-doc-tipo').value === 'renovacion') poblarContratosPrevios(); });
+  qs('#al-doc-prev')?.addEventListener('change', (e) => prellenarDesdeAnterior(e.target.value));
+  qs('#al-inquilino')?.addEventListener('change', () => { actualizarVisibilidadDoc(); poblarContratosPrevios(); });
+  qs('#al-deposito')?.addEventListener('input', resumenAbonosDoc);
   const form = qs('#form-alquiler');
   form.addEventListener('submit', async (evt) => {
     evt.preventDefault();
@@ -410,6 +558,8 @@ function bindFormAlquiler() {
       notas: qs('#al-notas').value || null,
       n_ocupantes: qs('#al-ocupantes').value ? Number(qs('#al-ocupantes').value) : null,
     };
+    const datosDoc = recogerDatosDoc();
+    if (Object.keys(datosDoc).length) payload.datos_contrato = datosDoc;
     // Solo se envía el estado si cambió: el trigger de la BD regenera cuotas
     // cada vez que se actualiza la columna estado (aunque no cambie), y eso
     // duplicaba el cronograma al mover fechas.
@@ -453,7 +603,7 @@ function bindFormAlquiler() {
     try {
       let contrato;
       if (editingId) {
-        contrato = await updateContratoAlquiler(editingId, payload);
+        contrato = await guardarConFallbackDatos((pl) => updateContratoAlquiler(editingId, pl), payload);
         if (planCronograma) {
           try {
             await aplicarCronogramaAlquiler(contrato.id, planCronograma, montoRentaTotal);
@@ -477,7 +627,7 @@ function bindFormAlquiler() {
           showToast('Contrato actualizado.', 'success');
         }
       } else {
-        contrato = await createContratoAlquiler({ ...payload, estado: 'vigente' });
+        contrato = await guardarConFallbackDatos((pl) => createContratoAlquiler({ ...pl, estado: 'vigente' }), payload);
         showToast('Contrato creado. Las cuotas mensuales se generaron automáticamente.', 'success');
         await maybeCrearComision('alquiler', contrato.id, payload.agente_id);
       }

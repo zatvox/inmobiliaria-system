@@ -10,6 +10,10 @@
 <link rel="stylesheet" href="../assets/css/components.css" />
 <link rel="stylesheet" href="../assets/css/responsive.css" />
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
+<style>
+  .al-doc { border:1px solid var(--gray-200,#E5E7EB); border-radius:10px; padding:10px 14px; background:#FAFAFB; }
+  .al-doc > summary { cursor:pointer; font-weight:600; }
+</style>
 </head>
 <body data-page="contratos">
   <div class="app-shell">
@@ -93,6 +97,18 @@
           </div>
         </div>
       </main>
+    </div>
+  </div>
+
+  <!-- ========================= MODAL: GENERAR DOCUMENTO DE CONTRATO ========================= -->
+  <div class="modal-overlay" id="modal-contrato-doc" aria-hidden="true">
+    <div class="modal" style="max-width:1240px; width:96vw;">
+      <div class="modal-header">
+        <h3 id="ct-titulo">Generar contrato</h3>
+        <button class="modal-close" data-modal-close aria-label="Cerrar">×</button>
+      </div>
+      <div class="modal-body" id="ct-body" style="max-height:72vh; overflow:auto;"></div>
+      <div class="modal-footer" id="ct-footer"></div>
     </div>
   </div>
 
@@ -192,6 +208,64 @@
               <div class="hint" style="margin-bottom:8px;">Solo si este local NO tiene medidor propio y paga un monto fijo mensual de agua/luz/etc — se usa en Cálculo de Servicios en vez de una lectura.</div>
               <div id="al-servicios-fijos-list"></div>
               <button type="button" class="btn btn-tertiary btn-sm" id="btn-agregar-servicio-fijo" style="margin-top:6px;">+ Agregar servicio con monto fijo</button>
+            </div>
+            <div class="form-field full">
+              <details id="al-doc-details" class="al-doc">
+                <summary>📄 Datos para el documento del contrato (renovación, garantía abonada, firma)</summary>
+                <div class="hint" style="margin:8px 0;">Opcional. Se guardan en el contrato y se usan al generar el Word/PDF con el botón “📄 Contrato”.</div>
+                <div class="form-grid">
+                  <div class="form-field">
+                    <label for="al-doc-tipo">Tipo de contrato</label>
+                    <select id="al-doc-tipo"><option value="nuevo">Contrato nuevo</option><option value="renovacion">Renovación</option></select>
+                  </div>
+                  <div class="form-field" id="al-doc-prev-wrap" style="display:none;">
+                    <label for="al-doc-prev">Renueva el contrato de…</label>
+                    <select id="al-doc-prev"></select>
+                    <div class="hint">Al elegirlo se copian garantía, abonos, aval, servicios fijos y datos del documento.</div>
+                  </div>
+                  <div class="form-field" id="al-doc-anterior-wrap" style="display:none;">
+                    <label for="al-doc-fecha-anterior">Contrato anterior firmado el</label>
+                    <input type="date" id="al-doc-fecha-anterior" />
+                  </div>
+                  <div class="form-field">
+                    <label for="al-doc-fecha-firma">Fecha de firma</label>
+                    <input type="date" id="al-doc-fecha-firma" />
+                    <div class="hint">Vacío = “a los ……. días” para completar a mano.</div>
+                  </div>
+                  <div class="form-field">
+                    <label for="al-doc-uso">Uso del inmueble</label>
+                    <select id="al-doc-uso"><option value="comercial">Comercial</option><option value="vivienda">Vivienda</option></select>
+                  </div>
+                  <div class="form-field">
+                    <label for="al-doc-aumento">Aumento mínimo en renovación (%)</label>
+                    <input type="number" id="al-doc-aumento" min="0" step="0.5" placeholder="10" />
+                  </div>
+                  <div class="form-field">
+                    <label for="al-doc-modalidad">Modalidad de la garantía</label>
+                    <input type="text" id="al-doc-modalidad" placeholder="Ej. 2x1" />
+                  </div>
+                  <div class="form-field">
+                    <label for="al-doc-penalidad">Penalidad por día adicional</label>
+                    <input type="number" id="al-doc-penalidad" min="0" step="0.01" placeholder="Auto: renta ÷ 30 + 50%" />
+                  </div>
+                  <div class="form-field full">
+                    <label>Abonos de la garantía (monto + N° de recibo)</label>
+                    <div id="al-doc-abonos"></div>
+                    <button type="button" class="btn btn-tertiary btn-sm" id="btn-doc-add-abono" style="margin-top:6px;">+ Agregar abono</button>
+                    <div class="hint" id="al-doc-abonos-resumen"></div>
+                  </div>
+                  <div class="form-field full" id="al-doc-rep-wrap" style="display:none;">
+                    <label>Inquilino empresa — representante y registros</label>
+                    <div class="form-grid">
+                      <div class="form-field"><label for="al-doc-rep-trat">Tratamiento</label><select id="al-doc-rep-trat"><option value="el Sr.">el Sr.</option><option value="la Sra.">la Sra.</option></select></div>
+                      <div class="form-field"><label for="al-doc-rep-nombre">Representante legal</label><input type="text" id="al-doc-rep-nombre" /></div>
+                      <div class="form-field"><label for="al-doc-rep-cargo">Cargo</label><input type="text" id="al-doc-rep-cargo" placeholder="Gerente General" /></div>
+                      <div class="form-field"><label for="al-doc-partida">Partida electrónica N°</label><input type="text" id="al-doc-partida" /></div>
+                      <div class="form-field"><label for="al-doc-oficina">Registros públicos de</label><input type="text" id="al-doc-oficina" placeholder="Lima" /></div>
+                    </div>
+                  </div>
+                </div>
+              </details>
             </div>
             <div class="form-field full">
               <label for="al-notas">Notas</label>
