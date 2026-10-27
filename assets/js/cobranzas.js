@@ -147,7 +147,7 @@ async function refresh() {
     renderKpis(paraKpis);
     tbody.innerHTML = '';
     if (!cuotasCache.length) {
-      tbody.append(el('tr', {}, [el('td', { colspan: '8' }, [
+      tbody.append(el('tr', {}, [el('td', { colspan: '9' }, [
         el('div', { class: 'empty-state' }, [el('div', { class: 'icon' }, '💰'), el('p', {}, 'No hay cuotas para este filtro.')]),
       ])]));
       return;
@@ -177,6 +177,7 @@ function renderRow(c) {
   const concepto = `${ORIGEN_LABELS[c.origen] ?? c.origen}${c.concepto ? ' · ' + c.concepto : ''}`;
   return el('tr', {}, [
     el('td', {}, c.deudor),
+    el('td', {}, c.propiedadNombre ?? '—'),
     el('td', {}, refSinInmueble(c.referencia)),
     el('td', {}, concepto),
     el('td', {}, formatCurrency(Number(c.monto) + Number(c.mora_aplicada))),

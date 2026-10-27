@@ -23,6 +23,8 @@ let propiedadesCache = [];
 let tiposServicioCache = [];
 let cuentasCache = [];
 let configuracionCache = null;
+let vistaRecibos = 'cuadro'; // 'lista' | 'cuadro'
+let reciboVentanaFin = ''; // último mes (YYYY-MM) visible en el cuadro de recibos
 let vistaLecturas = 'cuadro'; // 'lista' | 'cuadro' — por defecto cuadro (más rápido de leer)
 let lecturaPropiedadPreseleccionada = false;
 
@@ -502,16 +504,16 @@ const fechasExtraPorPropiedad = new Map();
 let celdaSeleccionada = null; // `${medidorId}|${fecha}` de la celda activa
 
 function seleccionarCelda(td, enfocar = true) {
-  qsa('#lecturas-vista-cuadro td.celda-lectura.sel').forEach((c) => c.classList.remove('sel'));
+  td.closest('table')?.querySelectorAll('td.celda-lectura.sel').forEach((c) => c.classList.remove('sel'));
   td.classList.add('sel');
   celdaSeleccionada = td.dataset.key;
-  if (enfocar) qs('#lecturas-vista-cuadro')?.focus({ preventScroll: true });
+  if (enfocar) td.closest('[tabindex]')?.focus({ preventScroll: true });
   td.scrollIntoView({ block: 'nearest', inline: 'nearest' });
 }
 
 // Navegación estilo Excel: flechas mueven, Enter/F2 abren el modal.
 function manejarTeclasCuadro(evt) {
-  const actual = qs('#lecturas-vista-cuadro td.celda-lectura.sel');
+  const actual = evt.currentTarget.querySelector('td.celda-lectura.sel');
   if (!actual) return;
   if (['Enter', 'F2'].includes(evt.key)) { evt.preventDefault(); actual._abrir?.(); return; }
   const mover = { ArrowUp: [-1, 0], ArrowDown: [1, 0], ArrowLeft: [0, -1], ArrowRight: [0, 1] }[evt.key];
@@ -920,7 +922,136 @@ async function openLecturaModal(lectura = null, preset = null) {
 }
 
 /* ============================== RECIBOS GENERALES =============================== */
+// Punto de entrada único (lo llaman todas las pantallas): lista o cuadro.
 async function renderRecibos() {
+  const lista = qs('#recibos-vista-lista'), cuadro = qs('#recibos-vista-cuadro'), btn = qs('#btn-ver-cuadro-recibos');
+  const esCuadro = vistaRecibos === 'cuadro';
+  if (lista) lista.style.display = esCuadro ? 'none' : 'block';
+  if (cuadro) cuadro.style.display = esCuadro ? 'block' : 'none';
+  if (btn) btn.textContent = esCuadro ? '☰ Ver como lista' : '▦ Ver como cuadro';
+  qs('#recibos-leyenda').style.display = esCuadro ? 'flex' : 'none';
+  if (esCuadro) await renderRecibosCuadro(); else await renderRecibosLista();
+}
+
+function sumarMeses(periodo, n) {
+  const [y, m] = periodo.split('-').map(Number);
+  const d = new Date(y, m - 1 + n, 1);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+}
+const MESES_CORTOS = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
+
+// Matriz: filas = propiedad · servicio · cuenta, columnas = 12 meses, celda = monto
+// del recibo general (verde pagado / ámbar pendiente). Clic: editar o registrar.
+// Mismo formato y manejo que el cuadro de lecturas: filas = periodos (mes),
+// columnas = cuenta de servicio, celda = monto. Clic = seleccionar, Enter o
+// doble clic = registrar/editar, flechas = moverse, "Nueva fila" = agregar periodo.
+const periodosExtraRecibos = new Set();
+let reciboCeldaSel = null;
+
+async function renderRecibosCuadro() {
+  const cont = qs('#recibos-vista-cuadro');
+  const propiedadId = qs('#filtro-recibo-propiedad').value;
+  const tipoServicioId = qs('#filtro-recibo-servicio')?.value ?? '';
+  cont.innerHTML = '<div class="skeleton" style="height:80px;"></div>';
+  try {
+    const [recibos, cuentas] = await Promise.all([
+      listRecibosGenerales({ propiedadId, tipoServicioId }),
+      listCuentasServicio({ propiedadId, tipoServicioId }),
+    ]);
+    const cols = new Map();
+    const nuevaCol = (propId, tipoId, cuentaId, propiedad, servicio, cuenta) => {
+      const key = `${propId}|${tipoId}|${cuentaId ?? ''}`;
+      if (!cols.has(key)) cols.set(key, { key, propiedadId: propId, tipoId, cuentaId: cuentaId ?? '', propiedad, servicio, cuenta, porMes: new Map() });
+      return cols.get(key);
+    };
+    // Columnas: todas las cuentas activas (aunque no tengan recibos aún) + las de recibos existentes.
+    cuentas.filter((c) => c.activo !== false).forEach((c) => nuevaCol(c.propiedad_id, c.tipo_servicio_id, c.id, c.propiedad?.nombre_referencial ?? '—', c.tipo_servicio?.nombre ?? '—', c.codigo ?? ''));
+    const periodosSet = new Set();
+    recibos.forEach((r) => {
+      periodosSet.add(r.periodo);
+      nuevaCol(r.propiedad_id, r.tipo_servicio_id, r.cuenta_servicio_id, r.propiedad?.nombre_referencial ?? '—', r.tipo_servicio?.nombre ?? '—', r.cuenta_servicio?.codigo ?? '').porMes.set(r.periodo, r);
+    });
+    // Recibos sin cuenta asignada conviven con una columna "(única)" por propiedad/servicio.
+    [...periodosExtraRecibos].forEach((m) => { if (periodosSet.has(m)) periodosExtraRecibos.delete(m); });
+    periodosSet.add(periodoActual());
+    const filas = [...new Set([...periodosSet, ...periodosExtraRecibos])].sort();
+    cont.innerHTML = '';
+    if (!cols.size) {
+      cont.append(el('div', { class: 'empty-state' }, [el('div', { class: 'icon' }, '🧾'), el('p', {}, 'Sin cuentas ni recibos generales registrados.')]));
+      return;
+    }
+    const columnas = [...cols.values()].sort((a, b) => a.propiedad.localeCompare(b.propiedad) || a.servicio.localeCompare(b.servicio) || a.cuenta.localeCompare(b.cuenta));
+
+    const inputPeriodo = el('input', { type: 'month', style: 'max-width:170px;', title: 'Periodo de la nueva fila' });
+    const agregarFila = () => {
+      const m = inputPeriodo.value;
+      if (!m) { showToast('Elige el periodo de la nueva fila.', 'error'); return; }
+      if (filas.includes(m)) { showToast('Ese periodo ya existe en el cuadro.', 'info'); return; }
+      periodosExtraRecibos.add(m);
+      reciboCeldaSel = null;
+      renderRecibosCuadro();
+    };
+    cont.append(el('div', { class: 'grid-bar' }, [
+      el('div', { class: 'grid-bar-add' }, [
+        el('span', { class: 'grid-bar-label' }, '＋ Nueva fila'),
+        inputPeriodo,
+        el('button', { type: 'button', class: 'btn btn-secondary btn-sm', 'data-admin-only': '', onclick: agregarFila }, 'Agregar periodo'),
+      ]),
+      el('div', { class: 'grid-bar-hint' }, 'Clic = seleccionar celda · Enter o doble clic = registrar/editar recibo · Flechas = moverse'),
+    ]));
+
+    const thead = el('thead', {}, [el('tr', {}, [
+      el('th', { style: 'position:sticky; left:0; background:var(--gray-100); z-index:2;' }, 'Periodo'),
+      ...columnas.map((c) => el('th', {
+        style: `background:${colorServicio(c.servicio)}22; border-bottom:3px solid ${colorServicio(c.servicio)}; text-align:right; white-space:nowrap; vertical-align:bottom;`,
+        title: `${c.propiedad} · ${c.servicio}${c.cuenta ? ' · ' + c.cuenta : ''}`,
+      }, [
+        propiedadId ? null : el('div', { style: 'font-weight:600; font-size:11px; color:var(--color-primary); max-width:150px; overflow:hidden; text-overflow:ellipsis;' }, c.propiedad),
+        el('div', { style: 'font-weight:700; font-size:12px; color:var(--gray-800);' }, c.servicio),
+        el('div', { style: 'font-weight:400; font-size:10px; color:var(--gray-500); margin-top:2px;' }, c.cuenta || '(cuenta única)'),
+      ])),
+    ])]);
+    const tbody = el('tbody', {}, filas.map((m) => {
+      const esExtra = periodosExtraRecibos.has(m);
+      return el('tr', { class: esExtra ? 'fila-nueva' : '' }, [
+        el('td', { 'data-sort': m, style: 'position:sticky; left:0; background:#fff; font-weight:600; white-space:nowrap; z-index:1;' }, [
+          `${MESES_CORTOS[Number(m.slice(5)) - 1]} ${m.slice(0, 4)}`,
+          esExtra ? el('span', { class: 'grid-chip-nueva' }, 'nueva') : null,
+          esExtra ? el('button', { type: 'button', class: 'grid-quitar', title: 'Quitar esta fila', onclick: () => { periodosExtraRecibos.delete(m); renderRecibosCuadro(); } }, '×') : null,
+        ]),
+        ...columnas.map((c) => {
+          const r = c.porMes.get(m);
+          const td = el('td', { class: 'celda-lectura', style: 'text-align:right;' }, r ? formatCurrency(r.monto_total_recibo) : '');
+          if (r) {
+            const pagado = r.estado_pago === 'pagado';
+            td.style.background = pagado ? '#DCFCE7' : '#FEF3C7';
+            td.style.fontWeight = '600';
+            td.title = `${pagado ? 'Pagado' : 'Pendiente'}${r.consumo_total_recibo ? `\nConsumo: ${formatNumber(r.consumo_total_recibo, 3)}` : ''}${r.precio_unitario ? `\nPrecio unit.: ${formatNumber(r.precio_unitario, 4)}` : ''}`;
+          }
+          td.dataset.key = `${c.key}|${m}`;
+          td._abrir = () => (r ? openReciboModal(r) : openReciboModal(null, { propiedadId: c.propiedadId, tipoServicioId: c.tipoId, cuentaId: c.cuentaId, periodo: m }));
+          td.addEventListener('click', () => { seleccionarCelda(td); reciboCeldaSel = td.dataset.key; });
+          td.addEventListener('dblclick', () => td._abrir());
+          return td;
+        }),
+      ]);
+    }));
+    const tabla = el('table', { class: 'data-table grid-excel', style: 'font-size:12px;' }, [thead, tbody]);
+    cont.append(tabla);
+    cont.tabIndex = 0;
+    cont.onkeydown = manejarTeclasCuadro;
+    if (reciboCeldaSel) {
+      const prev = [...tabla.querySelectorAll('td.celda-lectura')].find((c) => c.dataset.key === reciboCeldaSel);
+      if (prev) seleccionarCelda(prev, false); else reciboCeldaSel = null;
+    }
+  } catch (err) {
+    console.error(err);
+    cont.innerHTML = '';
+    showToast('No se pudo cargar el cuadro de recibos.', 'error');
+  }
+}
+
+async function renderRecibosLista() {
   const tbody = qs('#recibos-tbody');
   try {
     const recibos = await listRecibosGenerales({ propiedadId: qs('#filtro-recibo-propiedad').value, tipoServicioId: qs('#filtro-recibo-servicio')?.value ?? '' });
@@ -975,9 +1106,12 @@ async function eliminarRecibo(recibo) {
 function bindRecibos() {
   qs('#filtro-recibo-propiedad')?.addEventListener('change', renderRecibos);
   qs('#filtro-recibo-servicio')?.addEventListener('change', renderRecibos);
+  qs('#btn-ver-cuadro-recibos')?.addEventListener('click', () => { vistaRecibos = vistaRecibos === 'cuadro' ? 'lista' : 'cuadro'; renderRecibos(); });
   qs('#btn-nuevo-recibo')?.addEventListener('click', () => openReciboModal());
   qs('#re-propiedad')?.addEventListener('change', refreshCuentasRecibo);
   qs('#re-tipo-servicio')?.addEventListener('change', refreshCuentasRecibo);
+  ['#re-propiedad', '#re-tipo-servicio', '#re-cuenta', '#re-periodo'].forEach((id) => qs(id)?.addEventListener('change', actualizarContextoRecibo));
+  ['#re-monto', '#re-consumo'].forEach((id) => qs(id)?.addEventListener('input', actualizarContextoRecibo));
 
   const form = qs('#form-recibo');
   form.addEventListener('submit', async (evt) => {
@@ -1031,14 +1165,14 @@ async function refreshCuentasRecibo() {
   if (cuentas.some((c) => c.id === currentValue)) sel.value = currentValue;
 }
 
-async function openReciboModal(recibo = null) {
+async function openReciboModal(recibo = null, preset = null) {
   const form = qs('#form-recibo');
   form.reset();
   form.dataset.editingId = recibo?.id ?? '';
   form.dataset.fotoUrlActual = recibo?.foto_recibo_url ?? '';
   qs('#modal-recibo-title').textContent = recibo ? 'Editar recibo general' : 'Registrar recibo general';
-  qs('#re-propiedad').value = recibo?.propiedad_id ?? '';
-  qs('#re-tipo-servicio').value = recibo?.tipo_servicio_id ?? '';
+  qs('#re-propiedad').value = recibo?.propiedad_id ?? preset?.propiedadId ?? '';
+  qs('#re-tipo-servicio').value = recibo?.tipo_servicio_id ?? preset?.tipoServicioId ?? '';
   await refreshCuentasRecibo();
   if (recibo) {
     qs('#re-cuenta').value = recibo.cuenta_servicio_id ?? '';
@@ -1048,10 +1182,50 @@ async function openReciboModal(recibo = null) {
     qs('#re-fecha-venc').value = recibo.fecha_vencimiento_recibo ?? '';
     qs('#re-notas').value = recibo.notas ?? '';
   } else {
-    qs('#re-periodo').value = periodoActual();
+    qs('#re-periodo').value = preset?.periodo ?? periodoActual();
+    if (preset?.cuentaId) qs('#re-cuenta').value = preset.cuentaId;
   }
   qs('#re-foto-file').value = '';
+  // Desde una celda del cuadro la propiedad/servicio/cuenta/periodo ya vienen definidos: se bloquean.
+  const desdeCelda = !!(recibo || preset);
+  ['#re-propiedad', '#re-tipo-servicio', '#re-cuenta', '#re-periodo'].forEach((id) => { qs(id).disabled = desdeCelda; });
+  await actualizarContextoRecibo();
   openModal('modal-recibo');
+  setTimeout(() => qs('#re-monto')?.focus(), 80);
+}
+
+// Resumen del recibo (propiedad · servicio · cuenta · periodo) y comparación con el mes anterior.
+async function actualizarContextoRecibo() {
+  const box = qs('#re-contexto');
+  if (!box) return;
+  const form = qs('#form-recibo');
+  const editingId = form.dataset.editingId;
+  const sel = (id) => qs(id).selectedOptions[0]?.textContent?.trim() ?? '';
+  const propiedadId = qs('#re-propiedad').value, tipoId = qs('#re-tipo-servicio').value, cuentaId = qs('#re-cuenta').value, periodo = qs('#re-periodo').value;
+  if (!propiedadId || !tipoId || !periodo) { box.style.display = 'none'; return; }
+  const titulo = [sel('#re-propiedad'), sel('#re-tipo-servicio'), cuentaId ? sel('#re-cuenta') : '', periodo].filter(Boolean).join(' · ');
+  let extra = '';
+  try {
+    const lista = await listRecibosGenerales({ propiedadId, tipoServicioId: tipoId });
+    const misma = lista.filter((r) => (r.cuenta_servicio_id ?? '') === cuentaId);
+    const prev = misma.find((r) => r.periodo === periodoAnterior(periodo));
+    if (prev) {
+      extra += `Mes anterior: <b>${formatCurrency(prev.monto_total_recibo)}</b>${prev.consumo_total_recibo ? ` · consumo ${formatNumber(prev.consumo_total_recibo, 3)}` : ''}`;
+      if (!editingId && !qs('#re-fecha-venc').value && prev.fecha_vencimiento_recibo) {
+        const d = new Date(`${prev.fecha_vencimiento_recibo}T00:00:00`);
+        d.setMonth(d.getMonth() + 1);
+        qs('#re-fecha-venc').value = d.toISOString().slice(0, 10);
+      }
+    } else extra += 'Sin recibo del mes anterior para comparar.';
+    const dup = misma.find((r) => r.periodo === periodo && r.id !== editingId);
+    if (dup) extra += ' <span style="color:#B45309; font-weight:600;">⚠ Ya existe un recibo para este periodo.</span>';
+  } catch (e) { console.error(e); }
+  box.style.display = 'block';
+  box.innerHTML = `<div style="font-weight:700;">${titulo}</div><div style="font-size:12px; color:var(--gray-600); margin-top:2px;">${extra}</div>`;
+  const monto = Number(qs('#re-monto').value);
+  const consumo = Number(qs('#re-consumo').value);
+  const pu = qs('#re-precio-calc');
+  if (pu) pu.textContent = monto && consumo ? `Precio unitario: ${formatNumber(monto / consumo, 4)}` : '';
 }
 
 /* ============================= CUENTAS DE SERVICIO ============================== */

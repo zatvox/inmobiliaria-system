@@ -429,6 +429,25 @@ function bindFormAlquiler() {
   });
   qs('#btn-agregar-servicio-fijo')?.addEventListener('click', () => agregarFilaServicioFijo());
   qs('#btn-agregar-seccion')?.addEventListener('click', () => agregarFilaSeccion());
+  // El día de las cuotas sale de "Día de vencimiento": al mover la fecha de
+  // inicio se ajusta solo (si no, el cronograma quedaba en el día anterior y
+  // "no cambiaba nada"), junto con las secciones originales que usaban la fecha vieja.
+  const fi = qs('#al-fecha-inicio');
+  fi?.addEventListener('focus', () => { fi.dataset.previo = fi.value; });
+  fi?.addEventListener('change', () => {
+    const previo = fi.dataset.previo || '';
+    if (!fi.value) return;
+    const dia = Number(fi.value.slice(8, 10));
+    if (Number(qs('#al-dia-venc').value) !== dia) {
+      qs('#al-dia-venc').value = dia;
+      showToast(`Día de vencimiento ajustado a ${dia} (según la fecha de inicio). Puedes cambiarlo si es otro.`, 'info', 5000);
+    }
+    qsa('#al-secciones-list > div').forEach((row) => {
+      const f = row.querySelector('.sec-fecha-inicio');
+      if (f && row.dataset.esAdenda !== 'true' && (!f.value || f.value === previo)) f.value = fi.value;
+    });
+    fi.dataset.previo = fi.value;
+  });
   qs('#btn-doc-add-abono')?.addEventListener('click', () => { docAbonos.push({ monto: '', recibo: '' }); pintarAbonosDoc(); });
   qs('#al-doc-tipo')?.addEventListener('change', () => { actualizarVisibilidadDoc(); if (qs('#al-doc-tipo').value === 'renovacion') poblarContratosPrevios(); });
   qs('#al-doc-prev')?.addEventListener('change', (e) => prellenarDesdeAnterior(e.target.value));
@@ -524,11 +543,16 @@ function bindFormAlquiler() {
       try {
         // Sin cambio de fechas igual se revisa si quedaron cuotas duplicadas u
         // obsoletas de una edición anterior (solo se anulan, no se crean).
-        const plan = await planCronogramaAlquiler(editingId, { fecha_inicio: fechaInicio, dia_vencimiento: diaVenc, fecha_fin: fechaFin || null }, { soloObsoletas: !fechasCambiaron });
+        const plan = await planCronogramaAlquiler(editingId, { fecha_inicio: fechaInicio, dia_vencimiento: diaVenc, fecha_fin: fechaFin || null }, { soloObsoletas: !fechasCambiaron, reemplazarTodo: !!fechasCambiaron });
+        if (plan.bloqueadas?.length) {
+          const lista = plan.bloqueadas.slice(0, 6).map((c) => `• ${formatDate(c.fecha_vencimiento)} (${c.estado})`).join('\n');
+          alert(`No se puede cambiar las fechas / el día de pago: ${plan.bloqueadas.length} cuota(s) ya tienen pagos registrados:\n\n${lista}${plan.bloqueadas.length > 6 ? '\n• …' : ''}\n\nPrimero anula esos pagos en Cobranzas y Pagos → Abonos (⋮ → Anular pago) y vuelve a guardar el contrato. Nada se guardó.`);
+          return;
+        }
         if (plan.anular.length || plan.crear.length) {
           const rango = (arr) => (arr.length ? `${formatDate(arr[0].fecha_vencimiento)} – ${formatDate(arr[arr.length - 1].fecha_vencimiento)}` : '');
           const ok = confirmAction(
-            (fechasCambiaron ? 'Cambiaste las fechas del contrato; el cronograma de cuotas se ajustará:' : 'Se detectaron cuotas duplicadas/obsoletas de un cronograma anterior:') + '\n\n' +
+            (fechasCambiaron ? 'Cambiaste las fechas / el día de pago: se reemplazará TODO el cronograma de cuotas (ninguna tiene pagos):' : 'Se detectaron cuotas duplicadas/obsoletas de un cronograma anterior:') + '\n\n' +
             `• Se ANULARÁN ${plan.anular.length} cuota(s) pendiente(s)/vencida(s) sin pagos que ya no corresponden ${rango(plan.anular)}.\n` +
             `• Se CREARÁN ${plan.crear.length} cuota(s) nueva(s) ${rango(plan.crear)}.\n\n` +
             'Las cuotas con pagos nunca se tocan. Si cancelas, el contrato NO se guarda.',

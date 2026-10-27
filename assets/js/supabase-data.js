@@ -308,7 +308,11 @@ function calcularFechasCronograma({ fecha_inicio, dia_vencimiento, fecha_fin }, 
 // las cuotas que ya existen y devuelve qué se anularía (cuotas pendientes /
 // vencidas SIN pagos que ya no calzan con el cronograma) y qué se crearía.
 // No modifica nada — sirve para avisar al usuario antes de guardar.
-export async function planCronogramaAlquiler(contratoId, valores, { soloObsoletas = false } = {}) {
+// reemplazarTodo (cambio de fechas/día de pago): se anulan TODAS las cuotas del
+// contrato y se crea el cronograma nuevo; si alguna ya tiene un pago vigente
+// (no anulado) NO se puede — se devuelve en `bloqueadas` y el caller debe
+// impedir guardar hasta que anulen ese pago en Cobranzas > Abonos.
+export async function planCronogramaAlquiler(contratoId, valores, { soloObsoletas = false, reemplazarTodo = false } = {}) {
   const { data: cuotas, error } = await supabase
     .from('cuotas')
     .select('id, numero_cuota, fecha_vencimiento, estado')
@@ -318,15 +322,23 @@ export async function planCronogramaAlquiler(contratoId, valores, { soloObsoleta
   const ids = cuotas.map((c) => c.id);
   let conPago = new Set();
   if (ids.length) {
-    const { data: pagos, error: ePagos } = await supabase.from('pagos').select('cuota_id').in('cuota_id', ids);
+    const { data: pagos, error: ePagos } = await supabase.from('pagos').select('cuota_id, estado').in('cuota_id', ids);
     if (ePagos) throw ePagos;
-    conPago = new Set(pagos.map((p) => p.cuota_id));
+    conPago = new Set(pagos.filter((p) => p.estado !== 'anulado').map((p) => p.cuota_id));
   }
   const hoy = new Date();
   const proyeccion = new Date(Date.UTC(hoy.getFullYear() + 1, hoy.getMonth(), hoy.getDate())).toISOString().slice(0, 10);
   const ultimaExistente = cuotas.length ? cuotas[cuotas.length - 1].fecha_vencimiento : '';
   const hasta = ultimaExistente > proyeccion ? ultimaExistente : proyeccion;
   const fechas = calcularFechasCronograma(valores, hasta);
+  if (reemplazarTodo) {
+    const bloqueadas = cuotas.filter((c) => conPago.has(c.id) || c.estado === 'pagada' || c.estado === 'parcial');
+    return {
+      anular: cuotas.filter((c) => !bloqueadas.includes(c)),
+      crear: fechas.map((f, i) => ({ fecha_vencimiento: f, numero_cuota: i + 1 })),
+      bloqueadas,
+    };
+  }
   const setFechas = new Set(fechas);
   const finContrato = valores.fecha_fin || '9999-12-31';
   const mesesConCuotaCorrecta = new Set(cuotas.filter((c) => setFechas.has(c.fecha_vencimiento)).map((c) => c.fecha_vencimiento.slice(0, 7)));
@@ -342,7 +354,7 @@ export async function planCronogramaAlquiler(contratoId, valores, { soloObsoleta
   const crear = (soloObsoletas ? [] : fechas)
     .map((f, i) => ({ fecha_vencimiento: f, numero_cuota: i + 1 }))
     .filter((c) => !existentes.has(c.fecha_vencimiento));
-  return { anular, crear };
+  return { anular, crear, bloqueadas: [] };
 }
 
 // Aplica el plan: anula (no borra) las cuotas obsoletas y crea las faltantes
@@ -651,18 +663,20 @@ export async function listCuotas({ origen = '', estado = '', search = '', propie
   }
 
   const enriched = data.map((c) => {
-    let deudor = '—', referencia = '—', propId = null, tipoServId = null, telefono = null;
+    let deudor = '—', referencia = '—', propId = null, tipoServId = null, telefono = null, propiedadNombre = '—';
     if (c.origen === 'alquiler') {
       const a = mapAlquiler.get(c.contrato_id);
       deudor = a?.inquilino?.nombre ?? '—';
       telefono = a?.inquilino?.telefono ?? null;
       propId = a?.seccion?.propiedad_id ?? null;
+      propiedadNombre = a?.seccion?.propiedades?.nombre_referencial ?? '—';
       referencia = a ? `${a.seccion?.propiedades?.nombre_referencial ?? ''} · ${nombresSeccionesContrato(a, a.seccion?.nombre)}` : '—';
     } else if (c.origen === 'venta') {
       const v = mapVenta.get(c.contrato_id);
       deudor = v?.comprador?.nombre ?? '—';
       telefono = v?.comprador?.telefono ?? null;
       propId = v?.seccion?.propiedad_id ?? null;
+      propiedadNombre = v?.seccion?.propiedades?.nombre_referencial ?? '—';
       referencia = v ? `${v.seccion?.propiedades?.nombre_referencial ?? ''} · ${v.seccion?.nombre ?? ''}` : '—';
     } else if (c.origen === 'servicio') {
       const d = mapDetalle.get(c.calculo_servicio_detalle_id);
@@ -670,10 +684,11 @@ export async function listCuotas({ origen = '', estado = '', search = '', propie
       telefono = d?.contrato_alquiler?.inquilino?.telefono ?? null;
       propId = d?.seccion?.propiedad_id ?? null;
       tipoServId = d?.calculo_periodo?.tipo_servicio_id ?? null;
+      propiedadNombre = d?.seccion?.propiedades?.nombre_referencial ?? '—';
       referencia = d ? `${d.seccion?.propiedades?.nombre_referencial ?? ''} · ${nombresSeccionesContrato(d.contrato_alquiler, d.seccion?.nombre)} · ${d.calculo_periodo?.tipo_servicio?.nombre ?? ''}` : '—';
     }
     const totalPagado = (c.pagos ?? []).filter((p) => p.estado !== 'anulado').reduce((s, p) => s + Number(p.monto), 0);
-    return { ...c, deudor, telefono, referencia, propiedadId: propId, tipoServicioId: tipoServId, totalPagado, saldo: Number(c.monto) + Number(c.mora_aplicada) - totalPagado };
+    return { ...c, deudor, telefono, referencia, propiedadNombre, propiedadId: propId, tipoServicioId: tipoServId, totalPagado, saldo: Number(c.monto) + Number(c.mora_aplicada) - totalPagado };
   });
 
   let result = enriched;

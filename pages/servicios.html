@@ -115,14 +115,22 @@
           <select id="filtro-recibo-propiedad" class="select-propiedad" style="display:none;"></select>
           <div class="page-header" style="margin-bottom:12px; flex-wrap:wrap; gap:10px;">
             <select id="filtro-recibo-servicio" style="max-width:180px;"><option value="">Todos los servicios</option></select>
+            <div style="flex:1 0 0; min-width:8px;"></div>
+            <button type="button" class="btn btn-tertiary" id="btn-ver-cuadro-recibos">☰ Ver como lista</button>
             <button class="btn btn-primary" id="btn-nuevo-recibo" data-admin-only>+ Registrar recibo</button>
           </div>
-          <div class="table-wrap">
+          <div style="display:flex; gap:14px; align-items:center; font-size:12px; color:var(--gray-500); margin-bottom:8px;" id="recibos-leyenda">
+            <span><span style="display:inline-block; width:10px; height:10px; border-radius:2px; background:#BBF7D0; vertical-align:middle; margin-right:4px;"></span>Pagado</span>
+            <span><span style="display:inline-block; width:10px; height:10px; border-radius:2px; background:#FDE68A; vertical-align:middle; margin-right:4px;"></span>Pendiente</span>
+            <span>Doble clic o Enter en una celda para registrar/editar</span>
+          </div>
+          <div class="table-wrap" id="recibos-vista-lista" style="display:none;">
             <table class="data-table">
               <thead><tr><th>Propiedad</th><th>Servicio</th><th>Periodo</th><th>Monto total</th><th>Estado</th><th></th></tr></thead>
               <tbody id="recibos-tbody"><tr><td colspan="6"><div class="skeleton" style="height:20px;"></div></td></tr></tbody>
             </table>
           </div>
+          <div class="table-wrap" id="recibos-vista-cuadro"></div>
         </div>
 
         <!-- ============================= CUENTAS DE SERVICIO ============================== -->
@@ -355,6 +363,7 @@
       </div>
       <form id="form-recibo">
         <div class="modal-body">
+          <div id="re-contexto" style="display:none; background:#EEF4FF; border:1px solid #C7D7FE; border-radius:8px; padding:10px 12px; margin-bottom:12px;"></div>
           <div class="form-grid">
             <div class="form-field">
               <label for="re-propiedad">Propiedad *</label>
@@ -380,7 +389,7 @@
             <div class="form-field">
               <label for="re-consumo">Consumo total (opcional)</label>
               <input type="number" id="re-consumo" step="0.001" min="0" />
-              <div class="hint">Si lo llenas, se calcula el precio unitario automáticamente.</div>
+              <div class="hint">Si lo llenas, se calcula el precio unitario automáticamente. <b id="re-precio-calc"></b></div>
             </div>
             <div class="form-field">
               <label for="re-fecha-venc">Fecha de vencimiento del recibo</label>
