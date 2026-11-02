@@ -62,17 +62,10 @@
       </header>
 
       <main class="content">
-        <div class="page-header">
-          <div>
-            <h1>Contratos</h1>
-            <p class="subtitle">Al crear un contrato vigente, las cuotas de cobranza se generan automáticamente.</p>
-          </div>
-          <button class="btn btn-primary" id="btn-nuevo-contrato" data-admin-only>+ Nuevo contrato</button>
-        </div>
-
         <div class="tabs">
           <button class="tab-btn active" data-tab="alquiler">Alquiler</button>
           <button class="tab-btn" data-tab="venta">Venta</button>
+          <button class="btn btn-primary" id="btn-nuevo-contrato" data-admin-only style="margin-left:auto; align-self:center;">+ Nuevo contrato</button>
         </div>
 
         <div style="margin-bottom:16px;">
@@ -82,8 +75,8 @@
         <div class="tab-panel active" id="panel-alquiler">
           <div class="table-wrap">
             <table class="data-table">
-              <thead><tr><th>Edificio</th><th>Distrito</th><th>Ubicación</th><th>Inquilino</th><th>Renta</th><th>Vigencia</th><th>Estado</th><th></th></tr></thead>
-              <tbody id="alquiler-tbody"><tr><td colspan="8"><div class="skeleton" style="height:20px;"></div></td></tr></tbody>
+              <thead><tr><th>Edificio</th><th>Distrito</th><th>Ubicación</th><th>Inquilino</th><th>Renta</th><th class="n">Día</th><th data-oculta-default>Vigencia</th><th>Estado</th><th>Vencimiento</th><th></th></tr></thead>
+              <tbody id="alquiler-tbody"><tr><td colspan="9"><div class="skeleton" style="height:20px;"></div></td></tr></tbody>
             </table>
           </div>
         </div>
@@ -121,6 +114,7 @@
       </div>
       <form id="form-alquiler">
         <div class="modal-body">
+        <p class="modal-hint">Al crear un contrato vigente, las cuotas de cobranza se generan autom&aacute;ticamente.</p>
           <div class="form-grid">
             <div class="form-field full">
               <label>Secciones del contrato *</label>
@@ -290,6 +284,7 @@
       </div>
       <form id="form-venta">
         <div class="modal-body">
+        <p class="modal-hint">Al crear un contrato vigente, las cuotas de cobranza se generan autom&aacute;ticamente.</p>
           <div class="form-grid">
             <div class="form-field full">
               <label for="ve-seccion">Sección *</label>

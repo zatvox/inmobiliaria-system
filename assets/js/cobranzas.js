@@ -7,11 +7,12 @@ import { initShell } from './main.js';
 import { isAdmin } from './auth.js';
 import {
   listCuotas, getCuota, aplicarMoraVencidas, registrarPago, verificarPago, anularPago, anularCuota,
-  uploadArchivo, getSignedUrl, getCatalogo, listComisionesAgentes, marcarComisionPagada,
+  marcarPapelCuota, uploadArchivo, getSignedUrl, getCatalogo, listComisionesAgentes, marcarComisionPagada,
   listDetalleCalculoPorCuota, eliminarCuotaServicio, listPropiedades, listTiposServicio, listPagos, actualizarPago,
 } from './supabase-data.js';
 import { qs, qsa, el, formatCurrency, formatDate, badgeHtml, showToast, openModal, closeModal, validateForm, setLoading, confirmAction, debounce } from './utils.js';
 import { abrirCobroMasivo } from './cobro-masivo.js';
+import { abrirPdfCuota, bindPdfCuota, renderVistaPreviaCuota } from './cuota-pdf.js';
 import { agruparDetalleParaCuadro, buildCuadroConsumoEl, descargarCuadroComoImagen, getColorLineasTabla, capturarNodoACanvas } from './cuadro-consumo.js';
 import { enviarImagenWhatsapp, mensajeServicio, mensajeMensualidad, buildTarjetaMensualidadEl } from './whatsapp.js';
 
@@ -50,6 +51,8 @@ async function main() {
   bindToolbar();
   bindFormPago();
   bindEditarAbono();
+  bindPdfCuota({ verVistaPrevia: (id) => openDetalleModal(id) });
+  bindPapeles();
   await Promise.all([refresh(), renderComisiones()]);
 }
 
@@ -90,10 +93,13 @@ function bindTabs() {
     btn.addEventListener('click', () => {
       qsa('.tab-btn[data-tab]').forEach((b) => b.classList.toggle('active', b === btn));
       const esAbonos = btn.dataset.tab === 'abonos';
-      qs('#vista-cuotas').style.display = esAbonos ? 'none' : '';
+      const esPapeles = btn.dataset.tab === 'papeles';
+      qs('#vista-cuotas').style.display = (esAbonos || esPapeles) ? 'none' : '';
       qs('#vista-abonos').style.display = esAbonos ? '' : 'none';
-      qs('#card-comisiones').style.display = esAbonos ? 'none' : '';
+      qs('#vista-papeles').style.display = esPapeles ? '' : 'none';
+      qs('#card-comisiones').style.display = (esAbonos || esPapeles) ? 'none' : '';
       if (esAbonos) { cargarAbonos(); return; }
+      if (esPapeles) { cargarPapeles(); return; }
       activeOrigen = btn.dataset.tab === 'todas' ? '' : btn.dataset.tab;
       refresh();
     });
@@ -147,7 +153,7 @@ async function refresh() {
     renderKpis(paraKpis);
     tbody.innerHTML = '';
     if (!cuotasCache.length) {
-      tbody.append(el('tr', {}, [el('td', { colspan: '9' }, [
+      tbody.append(el('tr', {}, [el('td', { colspan: '10' }, [
         el('div', { class: 'empty-state' }, [el('div', { class: 'icon' }, '💰'), el('p', {}, 'No hay cuotas para este filtro.')]),
       ])]));
       return;
@@ -176,6 +182,9 @@ function renderKpis(cuotas) {
 function renderRow(c) {
   const concepto = `${ORIGEN_LABELS[c.origen] ?? c.origen}${c.concepto ? ' · ' + c.concepto : ''}`;
   return el('tr', {}, [
+    el('td', { style: 'white-space:nowrap;' }, c.nro_cobro
+      ? [el('span', { style: 'font-family:monospace; font-weight:700;' }, c.nro_cobro), c.impresa_at ? el('span', { title: `Impresa ${c.n_impresiones} vez/veces`, style: 'margin-left:4px; color:var(--color-success);' }, '🖨️') : null].filter(Boolean)
+      : el('span', { style: 'color:var(--gray-400); font-size:12px;', title: 'Se asigna al generar el PDF' }, 'sin número')),
     el('td', {}, c.deudor),
     el('td', {}, c.propiedadNombre ?? '—'),
     el('td', {}, refSinInmueble(c.referencia)),
@@ -191,6 +200,7 @@ function renderRow(c) {
       el('button', { class: 'btn-dots', title: 'Más acciones', onclick: (evt) => {
         evt.stopPropagation();
         const items = [{ icon: '👁️', label: 'Ver detalle', fn: () => openDetalleModal(c.id) }];
+        if (c.origen !== 'venta' && c.estado !== 'anulada') items.push({ icon: '📄', label: c.nro_cobro ? 'PDF (reimprimir)' : 'PDF', fn: () => abrirPdfCuota(c, refresh) });
         if (c.origen === 'servicio') items.push({ icon: '📷', label: 'Descargar cuadro', fn: () => descargarCuadroCuota(c, botonStub()) });
         if (c.origen === 'servicio' || c.origen === 'alquiler') items.push({ icon: '📲', label: 'Enviar por WhatsApp', fn: () => enviarCuotaWhatsapp(c) });
         if (c.origen === 'servicio' && isAdmin(profile)) items.push({ sep: true }, { icon: '🗑️', label: 'Eliminar', peligro: true, fn: () => eliminarCuota(c, botonStub()) });
@@ -535,7 +545,15 @@ async function openDetalleModal(cuotaId) {
     } else {
       qs('#btn-anular-cuota').style.display = 'none';
     }
+    // Vista previa del PDF de la cuota (antes de generar el correlativo)
+    const filaCuota = [...cuotasCache, ...papelesCache].find((x) => x.id === cuotaId);
+    const conPdf = cuota.origen !== 'venta' && cuota.estado !== 'anulada';
+    qs('#detalle-preview-wrap').style.display = conPdf ? '' : 'none';
+    const btnPdf = qs('#btn-detalle-pdf');
+    btnPdf.style.display = conPdf && filaCuota ? 'inline-flex' : 'none';
+    btnPdf.onclick = () => { closeModal('modal-detalle'); abrirPdfCuota(filaCuota, refresh); };
     openModal('modal-detalle');
+    if (conPdf) renderVistaPreviaCuota(qs('#detalle-preview'), cuotaId);
   } catch (err) {
     console.error(err);
     showToast('No se pudo cargar el detalle.', 'error');
@@ -615,3 +633,107 @@ async function renderComisiones() {
 }
 
 main();
+
+
+/* ======================== CONTROL DE PAPELES (archivador) ===================== */
+// Vista de control físico: qué números se emitieron, qué papeles ya cancelados
+// falta guardar en el archivador y qué papeles de cuotas anuladas hay que sacar.
+let papelesCache = [];
+let papelesVista = 'todos';
+
+async function cargarPapeles() {
+  try {
+    const todas = await listCuotas({ estado: '' });
+    papelesCache = todas.filter((c) => c.nro_cobro);
+    const series = [...new Set(papelesCache.map((c) => c.nro_cobro_serie))].sort();
+    const sel = qs('#pp-serie');
+    const actual = sel.value;
+    sel.innerHTML = '<option value="">Todas las series</option>' + series.map((x) => `<option value="${x}">${x}</option>`).join('');
+    sel.value = series.includes(actual) ? actual : '';
+    renderPapeles();
+  } catch (err) {
+    console.error(err);
+    showToast('No se pudo cargar el control de papeles. ¿Ejecutaste el SQL 29?', 'error');
+  }
+}
+
+const necesitaArchivar = (c) => c.estado !== 'anulada' && c.saldo <= 0.009 && !c.archivada_at;
+const necesitaRetirar = (c) => c.estado === 'anulada' && !c.papel_retirado_at;
+
+function renderPapeles() {
+  const serie = qs('#pp-serie').value;
+  const q = qs('#pp-buscar').value.trim().toLowerCase();
+  qs('#pp-n-archivar').textContent = papelesCache.filter(necesitaArchivar).length;
+  qs('#pp-n-retirar').textContent = papelesCache.filter(necesitaRetirar).length;
+  qsa('.pp-pill').forEach((b) => b.classList.toggle('active', b.dataset.pp === papelesVista));
+  qs('#pp-ayuda').textContent = {
+    todos: 'Todos los números emitidos, por serie y orden de número.',
+    archivar: 'Cuotas ya pagadas con su recibo: falta guardar el papel en el archivador de cancelados.',
+    retirar: 'Cuotas anuladas que ya se imprimieron: saca esa hoja del archivador y sella ANULADA.',
+  }[papelesVista];
+
+  let filas = papelesCache.filter((c) => (!serie || c.nro_cobro_serie === serie)
+    && (!q || c.nro_cobro.toLowerCase().includes(q) || (c.deudor ?? '').toLowerCase().includes(q)));
+  if (papelesVista === 'archivar') filas = filas.filter(necesitaArchivar);
+  if (papelesVista === 'retirar') filas = filas.filter(necesitaRetirar);
+  filas.sort((a, b) => a.nro_cobro_serie.localeCompare(b.nro_cobro_serie) || a.nro_cobro.localeCompare(b.nro_cobro));
+
+  // Huecos en la numeración (no deberían existir; si aparece alguno hay que investigarlo).
+  const huecos = [];
+  const porSerie = new Map();
+  papelesCache.forEach((c) => {
+    const n = Number(c.nro_cobro.split('-')[1]);
+    if (!porSerie.has(c.nro_cobro_serie)) porSerie.set(c.nro_cobro_serie, new Set());
+    porSerie.get(c.nro_cobro_serie).add(n);
+  });
+  porSerie.forEach((set, sr) => { const max = Math.max(...set); for (let i = 1; i <= max; i += 1) if (!set.has(i)) huecos.push(`${sr}-${String(i).padStart(4, '0')}`); });
+  const hb = qs('#pp-huecos');
+  hb.style.display = huecos.length ? 'block' : 'none';
+  hb.innerHTML = huecos.length ? `⚠️ <b>Números que faltan en la secuencia:</b> ${huecos.join(', ')}` : '';
+
+  const tbody = qs('#papeles-tbody');
+  tbody.innerHTML = '';
+  if (!filas.length) {
+    tbody.append(el('tr', {}, [el('td', { colspan: '10' }, [el('div', { class: 'empty-state' }, [el('div', { class: 'icon' }, '🗄️'), el('p', {}, papelesVista === 'todos' ? 'Todavía no se generó ninguna cuota con número.' : 'Nada pendiente aquí.')])])]));
+    return;
+  }
+  filas.forEach((c) => {
+    const papel = c.estado === 'anulada'
+      ? (c.papel_retirado_at ? 'Retirado' : 'Por retirar')
+      : (c.archivada_at ? 'En archivador' : (c.saldo <= 0.009 ? 'Falta archivar' : 'En cobranza'));
+    const accion = necesitaArchivar(c)
+      ? el('button', { class: 'btn btn-primary btn-sm', onclick: () => cambiarPapel(c, 'archivada_at', true) }, 'Ya la guardé')
+      : necesitaRetirar(c)
+        ? el('button', { class: 'btn btn-primary btn-sm', onclick: () => cambiarPapel(c, 'papel_retirado_at', true) }, 'Ya la retiré')
+        : (c.archivada_at ? el('button', { class: 'btn btn-tertiary btn-sm', onclick: () => cambiarPapel(c, 'archivada_at', false) }, 'Deshacer') : null);
+    tbody.append(el('tr', {}, [
+      el('td', { style: 'font-family:monospace; font-weight:700; white-space:nowrap;' }, c.nro_cobro),
+      el('td', {}, c.deudor),
+      el('td', {}, refSinInmueble(c.referencia)),
+      el('td', {}, `${ORIGEN_LABELS[c.origen] ?? c.origen}${c.concepto ? ' · ' + c.concepto : ''}`),
+      el('td', {}, formatDate(c.fecha_vencimiento)),
+      el('td', {}, formatCurrency(Number(c.monto) + Number(c.mora_aplicada))),
+      el('td', { html: badgeHtml(c.estado) }),
+      el('td', {}, c.impresa_at ? `${c.n_impresiones} · ${formatDate(c.impresa_at)}` : 'sin imprimir'),
+      el('td', {}, papel),
+      el('td', {}, accion),
+    ]));
+  });
+}
+
+async function cambiarPapel(c, campo, marcado) {
+  try {
+    await marcarPapelCuota(c.id, campo, marcado);
+    c[campo] = marcado ? new Date().toISOString() : null;
+    renderPapeles();
+  } catch (err) {
+    console.error(err);
+    showToast('No se pudo actualizar el estado del papel.', 'error');
+  }
+}
+
+function bindPapeles() {
+  qsa('.pp-pill').forEach((b) => b.addEventListener('click', () => { papelesVista = b.dataset.pp; renderPapeles(); }));
+  qs('#pp-serie')?.addEventListener('change', renderPapeles);
+  qs('#pp-buscar')?.addEventListener('input', debounce(renderPapeles, 250));
+}

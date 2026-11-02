@@ -58,18 +58,11 @@
       </header>
 
       <main class="content">
-        <div class="page-header">
-          <div>
-            <h1>Documentos</h1>
-            <p class="subtitle">Todo lo que se ha subido al sistema — fotos de inmuebles, medidores, recibos, vouchers, comprobantes de mantenimiento y tributos — en un solo lugar.</p>
-          </div>
-          <button class="btn btn-secondary" id="btn-recargar">Recargar</button>
-        </div>
-
         <div style="display:flex; gap:12px; margin-bottom:12px; flex-wrap:wrap; align-items:center;">
           <input type="text" id="search-input" placeholder="Buscar por nombre de archivo o referencia…" style="max-width:320px;" />
           <select id="filter-categoria" style="max-width:260px;"><option value="">Todas las categorías</option></select>
           <span id="documentos-total" style="font-size:13px; color:var(--gray-500);"></span>
+          <button class="btn btn-secondary" id="btn-recargar" style="margin-left:auto;">Recargar</button>
         </div>
 
         <div class="table-wrap">

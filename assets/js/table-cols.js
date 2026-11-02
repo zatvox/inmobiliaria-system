@@ -2,7 +2,8 @@
  * table-cols.js — Estándar de tablas: menú ⋮ (esquina superior derecha) para
  * mostrar/ocultar columnas en TODAS las tablas `.data-table` del sistema,
  * incluidas las que se dibujan después. La preferencia se recuerda por
- * página + tabla (localStorage). Se oculta por CSS (nth-child), así sobrevive
+ * página + tabla (localStorage). Una columna con <th data-oculta-default> arranca oculta
+ * hasta que el usuario elija otra cosa en el menú. Se oculta por CSS (nth-child), así sobrevive
  * a los re-renders de filas. Las tablas de Reportes (.reporte-imprimible, con
  * filas de celdas combinadas) se resuelven celda por celda para respetar los
  * colspan. Exclusiones: <table data-no-cols>, tablas con más de una fila de
@@ -119,7 +120,13 @@ function iniciar(table) {
   const key = claveTabla(table);
   const tid = `t${++contador}`;
   table.dataset.tid = tid;
-  hidden.set(tid, new Set(leer(key).filter((i) => Number.isInteger(i))));
+  // Sin preferencia guardada → arranca con ocultas las columnas marcadas <th data-oculta-default>.
+  // Apenas el usuario toca el menú (o "Mostrar todas") su elección manda.
+  const guardado = (() => { try { return localStorage.getItem(key); } catch { return null; } })();
+  const porDefecto = guardado === null
+    ? [...table.tHead.rows[0].cells].map((th, i) => (th.hasAttribute('data-oculta-default') ? i : -1)).filter((i) => i >= 0)
+    : leer(key);
+  hidden.set(tid, new Set(porDefecto.filter((i) => Number.isInteger(i))));
   if (table.closest('.reporte-imprimible')) tablasJs.set(tid, table);
 
   // Envoltorio relativo para fijar el botón en la esquina superior derecha.

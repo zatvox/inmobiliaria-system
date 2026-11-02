@@ -78,7 +78,7 @@ async function renderAlquiler(search = '') {
     const contratos = await listContratosAlquiler({ search });
     tbody.innerHTML = '';
     if (!contratos.length) {
-      tbody.append(el('tr', {}, [el('td', { colspan: '8' }, [
+      tbody.append(el('tr', {}, [el('td', { colspan: '10' }, [
         el('div', { class: 'empty-state' }, [el('div', { class: 'icon' }, '📄'), el('p', {}, 'Sin contratos de alquiler todavía.')]),
       ])]));
       return;
@@ -88,6 +88,36 @@ async function renderAlquiler(search = '') {
     console.error(err);
     showToast('No se pudieron cargar los contratos de alquiler.', 'error');
   }
+}
+
+// Barra de vencimiento de horizonte fijo: todas las filas se miden contra la
+// misma regla (próximos 12 meses), así se comparan contratos entre sí.
+// Rojo: vencido o < 30 días · ámbar: 30–90 · neutro: > 90. Indefinido = ∞.
+// Con renovación automática la barra va apagada (+ ↻): vence, pero no requiere acción.
+const HORIZONTE_DIAS = 365, UMBRAL_URGENTE = 30, UMBRAL_AVISO = 90;
+function celdaVencimiento(c) {
+  const td = el('td', { style: 'white-space:nowrap;' });
+  if (!['vigente', 'por_vencer'].includes(c.estado)) { td.textContent = '—'; td.style.color = 'var(--gray-400)'; return td; }
+  if (!c.fecha_fin) {
+    td.append(el('span', { title: `${formatDate(c.fecha_inicio)} → indefinido`, style: 'color:var(--gray-400); font-size:16px;' }, '∞'));
+    return td;
+  }
+  const hoy = new Date(); hoy.setHours(0, 0, 0, 0);
+  const dias = Math.round((new Date(`${c.fecha_fin}T00:00:00`) - hoy) / 86400000);
+  const auto = !!c.renovacion_automatica;
+  const color = dias < UMBRAL_URGENTE ? '#DC2626' : dias <= UMBRAL_AVISO ? '#F59E0B' : '#94A3B8';
+  const pct = dias <= 0 ? 3 : Math.max(4, Math.min(100, (dias / HORIZONTE_DIAS) * 100));
+  const texto = dias < 0 ? `venció hace ${-dias} d` : dias === 0 ? 'vence hoy' : dias > 90 ? `${Math.round(dias / 30.4)} m` : `${dias} d`;
+  const tip = `${formatDate(c.fecha_inicio)} → ${formatDate(c.fecha_fin)} · ${dias < 0 ? `venció hace ${-dias} días` : `faltan ${dias} días`}${auto ? ' · renovación automática' : ''}`;
+  td.title = tip;
+  td.append(el('div', { style: `display:flex; align-items:center; gap:8px; ${auto ? 'opacity:.5;' : ''}` }, [
+    el('div', { style: 'width:90px; height:8px; background:var(--gray-100); border-radius:999px; overflow:hidden; flex:none;' }, [
+      el('div', { style: `width:${pct}%; height:100%; background:${color}; border-radius:999px;` }),
+    ]),
+    el('span', { style: `font-size:12px; font-weight:${dias < UMBRAL_URGENTE && !auto ? 700 : 500}; color:${dias < UMBRAL_URGENTE && !auto ? color : 'var(--gray-600)'}; min-width:56px;` }, texto),
+    auto ? el('span', { title: 'Renovación automática', style: 'font-size:13px;' }, '↻') : null,
+  ]));
+  return td;
 }
 
 function renderRowAlquiler(c) {
@@ -103,9 +133,12 @@ function renderRowAlquiler(c) {
       nSecciones > 1 ? el('div', { style: 'font-size:11px; color:var(--gray-500);' }, `+${nSecciones - 1} sección(es) más`) : null,
     ]),
     el('td', {}, [c.inquilino?.nombre ?? '—', c.aval ? el('div', { style: 'font-size:11px; color:var(--gray-500);' }, `Aval: ${c.aval.nombre}`) : null]),
-    el('td', {}, `${formatCurrency(c.monto_renta, c.moneda)} / mes`),
+    el('td', {}, formatCurrency(c.monto_renta, c.moneda)),
+    el('td', { class: 'n', title: 'Día de vencimiento mensual de la cuota' },
+       c.dia_vencimiento ? String(c.dia_vencimiento) : '—'),
     el('td', {}, `${formatDate(c.fecha_inicio)} → ${c.fecha_fin ? formatDate(c.fecha_fin) : 'indefinido'}`),
     el('td', { html: badgeHtml(c.estado) }),
+    celdaVencimiento(c),
     el('td', { class: 'actions' }, [
       el('button', { class: 'btn btn-tertiary btn-sm', title: 'Generar el documento del contrato (Word / PDF)', onclick: () => abrirGenerarContrato(c.id) }, '📄 Contrato'),
       el('button', { class: 'btn btn-tertiary btn-sm', 'data-admin-only': '', onclick: () => editAlquiler(c.id) }, 'Editar'),

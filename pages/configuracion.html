@@ -130,6 +130,20 @@
             <button type="submit" class="btn btn-primary" id="btn-guardar-configuracion" data-admin-only>Guardar cambios</button>
           </form>
         </div>
+        <div class="card" style="max-width:720px; margin-top:20px;">
+          <div class="card-title">Cuotas por cobrar: series y colores</div>
+          <p style="color:var(--gray-500); margin-bottom:12px;">
+            Cada tipo de cuota tiene su propia serie y color en el PDF. El número final es <b>prefijo + N° de propietario + correlativo</b> (ej. <code>ALQ1-0001</code>).
+            Si cambias un prefijo, los números ya emitidos <b>no cambian</b>: la serie nueva empieza en 0001.
+          </p>
+          <div class="table-wrap">
+            <table class="data-table" data-no-cols>
+              <thead><tr><th>Tipo de cuota</th><th>Prefijo de la serie</th><th>Color del documento</th><th>Dígitos</th><th>Ejemplo</th></tr></thead>
+              <tbody id="cobro-tipos-tbody"></tbody>
+            </table>
+          </div>
+          <button type="button" class="btn btn-primary" id="btn-guardar-cobro-tipos" data-admin-only style="margin-top:12px;">Guardar series y colores</button>
+        </div>
       </main>
     </div>
   </div>

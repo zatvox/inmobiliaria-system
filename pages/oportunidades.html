@@ -58,17 +58,10 @@
       </header>
 
       <main class="content">
-        <div class="page-header">
-          <div>
-            <h1>Oportunidades</h1>
-            <p class="subtitle">Embudo comercial, sirve tanto para venta como para alquiler. Al cerrar, crea el contrato correspondiente en Contratos.</p>
-          </div>
-          <button class="btn btn-primary" id="btn-nueva-oportunidad" data-admin-only>+ Nueva oportunidad</button>
-        </div>
-
         <div class="tabs">
           <button class="tab-btn active" data-tab="venta">Venta</button>
           <button class="tab-btn" data-tab="alquiler">Alquiler</button>
+          <button class="btn btn-primary" id="btn-nueva-oportunidad" data-admin-only style="margin-left:auto; align-self:center;">+ Nueva oportunidad</button>
         </div>
 
         <div style="display:flex; gap:12px; margin-bottom:16px; flex-wrap:wrap;">
@@ -104,6 +97,7 @@
       </div>
       <form id="form-oportunidad">
         <div class="modal-body">
+        <p class="modal-hint">Al cerrar la oportunidad se crea autom&aacute;ticamente el contrato correspondiente en Contratos.</p>
           <div class="form-grid">
             <div class="form-field">
               <label for="op-tipo-operacion">Tipo *</label>

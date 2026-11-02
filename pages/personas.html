@@ -58,14 +58,6 @@
       </header>
 
       <main class="content">
-        <div class="page-header">
-          <div>
-            <h1>Personas</h1>
-            <p class="subtitle">Ficha única reutilizable: la misma persona puede ser inquilino, propietario, comprador o agente en distintos contratos.</p>
-          </div>
-          <button class="btn btn-primary" id="btn-nueva-persona" data-admin-only>+ Nueva persona</button>
-        </div>
-
         <div style="display:flex; gap:12px; margin-bottom:16px; flex-wrap:wrap;">
           <input type="text" id="search-input" placeholder="Buscar por nombre, DNI/RUC o email…" style="max-width:320px;" />
           <select id="filter-rol" style="max-width:220px;">
@@ -78,6 +70,7 @@
             <option value="lead">Lead</option>
             <option value="proveedor">Proveedor</option>
           </select>
+          <button class="btn btn-primary" id="btn-nueva-persona" data-admin-only style="margin-left:auto;">+ Nueva persona</button>
         </div>
 
         <div class="table-wrap">
@@ -103,6 +96,7 @@
       </div>
       <form id="form-persona">
         <div class="modal-body">
+        <p class="modal-hint">Ficha &uacute;nica reutilizable: la misma persona puede ser inquilino, propietario, comprador o agente en distintos contratos.</p>
           <div class="form-grid">
             <div class="form-field full">
               <label for="pe-nombre">Nombre completo *</label>

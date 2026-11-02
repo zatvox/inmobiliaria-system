@@ -605,12 +605,13 @@ export async function marcarComisionPagada(id, comprobanteUrl = null) {
 
 /* ============================ CUOTAS Y COBRANZAS ============================= */
 export async function listCuotas({ origen = '', estado = '', search = '', propiedadId = '', tipoServicioId = '', deudor = '', periodo = '' } = {}) {
+  // Columnas del correlativo (SQL 29): si todavía no se ejecutó, se reintenta sin ellas.
+  const COLS = 'id, origen, contrato_id, calculo_servicio_detalle_id, numero_cuota, concepto, monto, fecha_vencimiento, estado, mora_aplicada, created_at';
+  const COLS_NRO = ', nro_cobro, nro_cobro_serie, impresa_at, n_impresiones, archivada_at, papel_retirado_at';
+  const armarQuery = (conNro) => {
   let query = supabase
     .from('cuotas')
-    .select(`
-      id, origen, contrato_id, calculo_servicio_detalle_id, numero_cuota, concepto, monto, fecha_vencimiento, estado, mora_aplicada, created_at,
-      pagos ( id, monto, estado )
-    `)
+    .select(`${COLS}${conNro ? COLS_NRO : ''}, pagos ( id, monto, estado )`)
     .order('fecha_vencimiento', { ascending: true });
   if (origen) query = query.eq('origen', origen);
   if (estado === 'activas') query = query.neq('estado', 'anulada');
@@ -626,7 +627,12 @@ export async function listCuotas({ origen = '', estado = '', search = '', propie
     const hasta = `${siguiente.getFullYear()}-${String(siguiente.getMonth() + 1).padStart(2, '0')}-01`;
     query = query.gte('fecha_vencimiento', desde).lt('fecha_vencimiento', hasta);
   }
-  const { data, error } = await query;
+  return query;
+  };
+  let { data, error } = await armarQuery(true);
+  if (error && /nro_cobro|impresa_at|n_impresiones|archivada_at|papel_retirado_at/.test(error.message ?? '')) {
+    ({ data, error } = await armarQuery(false));
+  }
   if (error) throw error;
 
   // Resolver el "deudor" y referencia segun el origen, en llamadas separadas
@@ -697,7 +703,7 @@ export async function listCuotas({ origen = '', estado = '', search = '', propie
   if (deudor) result = result.filter((c) => c.deudor === deudor);
   if (search) {
     const s = search.toLowerCase();
-    result = result.filter((c) => c.deudor.toLowerCase().includes(s) || c.referencia.toLowerCase().includes(s) || (c.concepto ?? '').toLowerCase().includes(s));
+    result = result.filter((c) => c.deudor.toLowerCase().includes(s) || c.referencia.toLowerCase().includes(s) || (c.concepto ?? '').toLowerCase().includes(s) || (c.nro_cobro ?? '').toLowerCase().includes(s));
   }
   return result;
 }
@@ -849,7 +855,8 @@ export async function listCuotasAlquilerParaReporte({ periodo, propiedadId = '',
       importeTotal,
       totalPagado,
       saldo,
-      estado: c.estado,
+      // Importe 0 (ej. servicio de monto fijo S/ 0 ese mes): no hay nada que cobrar → no queda como pendiente.
+      estado: (saldo <= 0.009 && importeTotal <= 0.009 && ['pendiente', 'vencida', 'parcial'].includes(c.estado)) ? 'pagada' : c.estado,
       fechaVencimiento: c.fecha_vencimiento,
       pagos: pagosValidos.map((p) => ({
         monto: Number(p.monto),
@@ -1555,4 +1562,75 @@ export async function getDashboardKpis() {
     montoPendiente,
     cuotasVencidas,
   };
+}
+
+
+/* ===================== CORRELATIVO DE CUOTAS (SQL 29) ======================== */
+export async function previsualizarNroCobro(cuotaId) {
+  const { data, error } = await supabase.rpc('previsualizar_nro_cobro', { p_cuota_id: cuotaId });
+  if (error) throw error;
+  return data;
+}
+export async function asignarNroCobro(cuotaId) {
+  const { data, error } = await supabase.rpc('asignar_nro_cobro', { p_cuota_id: cuotaId });
+  if (error) throw error;
+  return data;
+}
+export async function registrarImpresionCuota(cuotaId) {
+  const { data, error } = await supabase.rpc('registrar_impresion_cuota', { p_cuota_id: cuotaId });
+  if (error) throw error;
+  return data;
+}
+// Marca/desmarca el papel físico: campo = 'archivada_at' (guardado en cancelados) o 'papel_retirado_at' (anulada, ya sacado).
+export async function marcarPapelCuota(cuotaId, campo, marcado = true) {
+  if (!['archivada_at', 'papel_retirado_at'].includes(campo)) throw new Error('Campo no válido.');
+  const { error } = await supabase.from('cuotas').update({ [campo]: marcado ? new Date().toISOString() : null }).eq('id', cuotaId);
+  if (error) throw error;
+}
+
+// Todos los datos que necesita el PDF de una cuota (alquiler o servicio).
+export async function getDatosCuotaDocumento(cuotaId) {
+  const { data: cuota, error } = await supabase.from('cuotas').select('*, pagos(*)').eq('id', cuotaId).single();
+  if (error) throw error;
+  const selContrato = `id, monto_renta, moneda, dia_vencimiento, fecha_inicio, fecha_fin,
+    inquilino:inquilino_id(nombre, tipo_documento, dni_ruc, telefono),
+    seccion:seccion_id(id, nombre, propiedad_id, propiedades(nombre_referencial, direccion, distrito, propietario:propietario_id(nombre, tipo_documento, dni_ruc))),
+    secciones_contrato:contratos_alquiler_secciones(seccion:seccion_id(nombre))`;
+  let contrato = null, detalle = null;
+  if (cuota.origen === 'alquiler') {
+    ({ data: contrato } = await supabase.from('contratos_alquiler').select(selContrato).eq('id', cuota.contrato_id).single());
+  } else if (cuota.origen === 'servicio') {
+    ({ data: detalle } = await supabase.from('calculo_servicios_detalle')
+      .select(`id, metodo, consumo, precio_unitario_aplicado, monto_calculado, n_personas, tarifa_por_persona, contrato_alquiler_id,
+        seccion:seccion_id(nombre, propiedad_id, propiedades(nombre_referencial, direccion, distrito, propietario:propietario_id(nombre, tipo_documento, dni_ruc))),
+        calculo_periodo:calculo_periodo_id(periodo, tipo_servicio:tipo_servicio_id(nombre, unidad_medida))`)
+      .eq('id', cuota.calculo_servicio_detalle_id).single());
+    if (detalle?.contrato_alquiler_id) {
+      ({ data: contrato } = await supabase.from('contratos_alquiler').select(selContrato).eq('id', detalle.contrato_alquiler_id).single());
+    }
+  }
+  const seccionBase = detalle?.seccion ?? contrato?.seccion ?? null;
+  const nombres = [];
+  const add = (n) => { if (n && !nombres.includes(n)) nombres.push(n); };
+  add(seccionBase?.nombre);
+  if (cuota.origen === 'alquiler') (contrato?.secciones_contrato ?? []).forEach((sc) => add(sc.seccion?.nombre));
+  const prop = seccionBase?.propiedades ?? contrato?.seccion?.propiedades ?? null;
+  // Servicio: todas las filas de cálculo (cuentas/medidores) que componen esta cuota.
+  let detalleRows = [];
+  if (cuota.origen === 'servicio') {
+    try { detalleRows = await listDetalleCalculoPorCuota(cuotaId); } catch (e) { console.error(e); }
+  }
+  return { cuota, contrato, detalle, detalleRows, secciones: nombres.join(' + '), propiedad: prop, propietario: prop?.propietario ?? null };
+}
+
+
+/* ===== Series y colores por tipo de cuota (SQL 30, pantalla Configuración) ===== */
+export async function listCobroTipos() {
+  const { data, error } = await supabase.from('cobro_tipos').select('*');
+  if (error) throw error;
+  return data ?? [];
+}
+export async function saveCobroTipos(filas) {
+  const { error } = await supabase.from('cobro_tipos').upsert(filas, { onConflict: 'tipo_clave' });
+  if (error) throw error;
 }

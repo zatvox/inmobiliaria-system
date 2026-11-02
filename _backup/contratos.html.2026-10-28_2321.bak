@@ -1,0 +1,373 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%231B3A5C'/%3E%3Ctext x='32' y='45' font-size='36' text-anchor='middle'%3E%F0%9F%8F%A2%3C/text%3E%3C/svg%3E">
+<title>Contratos · Gestión Inmobiliaria</title>
+<link rel="stylesheet" href="../assets/css/variables.css" />
+<link rel="stylesheet" href="../assets/css/styles.css" />
+<link rel="stylesheet" href="../assets/css/components.css" />
+<link rel="stylesheet" href="../assets/css/responsive.css" />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
+<style>
+  .al-doc { border:1px solid var(--gray-200,#E5E7EB); border-radius:10px; padding:10px 14px; background:#FAFAFB; }
+  .al-doc > summary { cursor:pointer; font-weight:600; }
+</style>
+</head>
+<body data-page="contratos">
+  <div class="app-shell">
+    <div class="sidebar-backdrop"></div>
+    <aside class="sidebar">
+      <div class="sidebar-brand">
+        <div class="logo-mark">GI</div>
+        <span>Gestión Inmobiliaria</span>
+      </div>
+      <nav class="sidebar-nav" aria-label="Navegación principal">
+        <div class="nav-section-title">Operación</div>
+        <a class="nav-link" data-page="dashboard" href="../index.html"><span class="nav-icon">🏠</span> Dashboard</a>
+        <a class="nav-link" data-page="inmuebles" href="inmuebles.html"><span class="nav-icon">🏢</span> Inmuebles</a>
+        <a class="nav-link" data-page="personas" href="personas.html"><span class="nav-icon">👥</span> Personas</a>
+        <a class="nav-link" data-page="contratos" href="contratos.html"><span class="nav-icon">📄</span> Contratos</a>
+        <a class="nav-link" data-page="cobranzas" href="cobranzas.html"><span class="nav-icon">💰</span> Cobranzas y Pagos</a>
+        <a class="nav-link" data-page="servicios" href="servicios.html"><span class="nav-icon">⚡</span> Cálculo de Servicios</a>
+        <a class="nav-link" data-page="gastos" href="gastos.html"><span class="nav-icon">🧰</span> Gastos y Mantenimiento</a>
+        <div class="nav-section-title">Comercial</div>
+        <a class="nav-link" data-page="oportunidades" href="oportunidades.html"><span class="nav-icon">🎯</span> Oportunidades</a>
+        <a class="nav-link" data-page="documentos" href="documentos.html"><span class="nav-icon">📁</span> Documentos</a>
+        <a class="nav-link" data-page="reportes" href="reportes.html"><span class="nav-icon">📊</span> Reportes</a>
+        <div class="nav-section-title">Sistema</div>
+        <a class="nav-link" data-page="configuracion" href="configuracion.html"><span class="nav-icon">⚙️</span> Configuración</a>
+      </nav>
+      <div class="sidebar-footer">Fase 4 · v0.3</div>
+    </aside>
+
+    <div class="main-area">
+      <header class="topbar">
+        <div style="display:flex; align-items:center; gap:12px;">
+          <button class="sidebar-toggle" aria-label="Abrir menú">☰</button>
+          <span class="topbar-title">Contratos</span>
+        </div>
+        <div class="topbar-user">
+          <div class="user-chip">
+            <div class="user-avatar" id="user-avatar">?</div>
+            <div>
+              <div id="user-name" style="font-weight:600;">Cargando…</div>
+              <div id="user-role" style="font-size:12px; color:var(--gray-500);"></div>
+            </div>
+          </div>
+          <a class="btn btn-tertiary btn-sm" id="btn-configuracion" href="configuracion.html" title="Configuración del sistema" style="font-size:16px; padding:6px 10px;">⚙️</a>
+          <button class="btn btn-tertiary btn-sm" id="logout-btn">Salir</button>
+        </div>
+      </header>
+
+      <main class="content">
+        <div class="page-header">
+          <div>
+            <h1>Contratos</h1>
+            <p class="subtitle">Al crear un contrato vigente, las cuotas de cobranza se generan automáticamente.</p>
+          </div>
+          <button class="btn btn-primary" id="btn-nuevo-contrato" data-admin-only>+ Nuevo contrato</button>
+        </div>
+
+        <div class="tabs">
+          <button class="tab-btn active" data-tab="alquiler">Alquiler</button>
+          <button class="tab-btn" data-tab="venta">Venta</button>
+        </div>
+
+        <div style="margin-bottom:16px;">
+          <input type="text" id="search-input" placeholder="Buscar por inquilino/comprador, sección o propiedad…" style="max-width:360px;" />
+        </div>
+
+        <div class="tab-panel active" id="panel-alquiler">
+          <div class="table-wrap">
+            <table class="data-table">
+              <thead><tr><th>Edificio</th><th>Distrito</th><th>Ubicación</th><th>Inquilino</th><th>Renta</th><th>Vigencia</th><th>Estado</th><th></th></tr></thead>
+              <tbody id="alquiler-tbody"><tr><td colspan="8"><div class="skeleton" style="height:20px;"></div></td></tr></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="tab-panel" id="panel-venta" style="display:none;">
+          <div class="table-wrap">
+            <table class="data-table">
+              <thead><tr><th>Edificio</th><th>Distrito</th><th>Ubicación</th><th>Comprador</th><th>Precio</th><th>Forma de pago</th><th>Estado</th><th></th></tr></thead>
+              <tbody id="venta-tbody"><tr><td colspan="8"><div class="skeleton" style="height:20px;"></div></td></tr></tbody>
+            </table>
+          </div>
+        </div>
+      </main>
+    </div>
+  </div>
+
+  <!-- ========================= MODAL: GENERAR DOCUMENTO DE CONTRATO ========================= -->
+  <div class="modal-overlay" id="modal-contrato-doc" aria-hidden="true">
+    <div class="modal" style="max-width:1240px; width:96vw;">
+      <div class="modal-header">
+        <h3 id="ct-titulo">Generar contrato</h3>
+        <button class="modal-close" data-modal-close aria-label="Cerrar">×</button>
+      </div>
+      <div class="modal-body" id="ct-body" style="max-height:72vh; overflow:auto;"></div>
+      <div class="modal-footer" id="ct-footer"></div>
+    </div>
+  </div>
+
+  <!-- ========================= MODAL: CONTRATO ALQUILER ========================= -->
+  <div class="modal-overlay" id="modal-alquiler" aria-hidden="true">
+    <div class="modal">
+      <div class="modal-header">
+        <h3 id="modal-alquiler-title">Nuevo contrato de alquiler</h3>
+        <button class="modal-close" data-modal-close aria-label="Cerrar">×</button>
+      </div>
+      <form id="form-alquiler">
+        <div class="modal-body">
+          <div class="form-grid">
+            <div class="form-field full">
+              <label>Secciones del contrato *</label>
+              <div class="hint" style="margin-bottom:8px;">Un mismo contrato puede cubrir varias secciones (ej. un inquilino que alquila 2 pisos). Si ya tiene contrato y toma una sección adicional más adelante, agrégala aquí: quedará registrada como <strong>adenda</strong> (ampliación del contrato original, con su propia mensualidad y fechas) sin perder el contrato inicial.</div>
+              <div id="al-secciones-list"></div>
+              <button type="button" class="btn btn-tertiary btn-sm" id="btn-agregar-seccion" style="margin-top:6px;">+ Agregar sección</button>
+              <div class="error-msg" id="al-secciones-error" style="display:none;">Agrega al menos una sección con su renta mensual.</div>
+            </div>
+            <div class="form-field">
+              <label for="al-inquilino">Inquilino *</label>
+              <select id="al-inquilino" required></select>
+              <div class="error-msg">Selecciona un inquilino.</div>
+              <div class="hint">¿No aparece? Créalo primero en Personas con el rol "Inquilino".</div>
+            </div>
+            <div class="form-field">
+              <label for="al-agente">Agente inmobiliario</label>
+              <select id="al-agente"></select>
+            </div>
+            <div class="form-field">
+              <label for="al-monto">Renta mensual total (suma de secciones)</label>
+              <input type="number" id="al-monto" step="0.01" min="0" readonly style="background:var(--gray-100);" />
+            </div>
+            <div class="form-field">
+              <label for="al-moneda">Moneda</label>
+              <select id="al-moneda"><option value="PEN">Soles (PEN)</option><option value="USD">Dólares (USD)</option></select>
+            </div>
+            <div class="form-field">
+              <label for="al-dia-venc">Día de vencimiento mensual *</label>
+              <input type="number" id="al-dia-venc" min="1" max="31" required />
+              <div class="error-msg">Ingresa un día entre 1 y 31.</div>
+            </div>
+            <div class="form-field">
+              <label for="al-deposito">Depósito de garantía</label>
+              <input type="number" id="al-deposito" step="0.01" min="0" />
+            </div>
+            <div class="form-field">
+              <label for="al-ocupantes">N° de ocupantes</label>
+              <input type="number" id="al-ocupantes" min="0" step="1" />
+              <div class="hint">Referencial — cuántas personas van a habitar/trabajar ahí (útil al negociar el monto fijo de servicios de abajo).</div>
+            </div>
+            <div class="form-field">
+              <label for="al-fecha-inicio">Fecha de inicio del contrato *</label>
+              <input type="date" id="al-fecha-inicio" required />
+              <div class="error-msg">Ingresa la fecha de inicio.</div>
+            </div>
+            <div class="form-field">
+              <label for="al-fecha-fin">Fecha de fin (opcional)</label>
+              <input type="date" id="al-fecha-fin" />
+              <div class="hint">Vacío = plazo indefinido; se generan cuotas 12 meses adelante.</div>
+            </div>
+            <div class="form-field">
+              <label class="checkbox-row" style="flex-direction:row; align-items:center; gap:8px;">
+                <input type="checkbox" id="al-renovacion" style="width:auto;" /> Renovación automática
+              </label>
+            </div>
+            <div class="form-field full">
+              <label class="checkbox-row" style="flex-direction:row; align-items:center; gap:8px;">
+                <input type="checkbox" id="al-tiene-aval" style="width:auto;" /> ¿Tiene aval?
+              </label>
+            </div>
+            <div class="form-field full" id="al-aval-field" style="display:none;">
+              <label for="al-aval">Aval</label>
+              <select id="al-aval"></select>
+              <div class="hint">¿No aparece? Créalo primero en Personas con el rol "Aval".</div>
+            </div>
+            <div class="form-field full" id="al-estado-field" style="display:none;">
+              <label for="al-estado">Estado del contrato</label>
+              <select id="al-estado">
+                <option value="vigente">Vigente</option>
+                <option value="por_vencer">Por vencer</option>
+                <option value="vencido">Vencido</option>
+                <option value="renovado">Renovado</option>
+                <option value="finalizado">Finalizado (libera la sección)</option>
+              </select>
+            </div>
+            <div class="form-field full" id="al-comision-field" style="display:none; background:var(--gray-100); padding:12px; border-radius:8px;">
+              <label style="margin-bottom:6px;">Comisión del agente (opcional, solo si seleccionaste uno arriba)</label>
+              <div style="display:flex; gap:12px;">
+                <div style="flex:1;"><input type="number" id="al-comision-monto" step="0.01" min="0" placeholder="Monto fijo (S/)" /></div>
+                <div style="flex:1;"><input type="number" id="al-comision-porcentaje" step="0.01" min="0" max="100" placeholder="% del contrato" /></div>
+              </div>
+            </div>
+            <div class="form-field full">
+              <label>Montos fijos de servicios (opcional)</label>
+              <div class="hint" style="margin-bottom:8px;">Solo si este local NO tiene medidor propio y paga un monto fijo mensual de agua/luz/etc — se usa en Cálculo de Servicios en vez de una lectura.</div>
+              <div id="al-servicios-fijos-list"></div>
+              <button type="button" class="btn btn-tertiary btn-sm" id="btn-agregar-servicio-fijo" style="margin-top:6px;">+ Agregar servicio con monto fijo</button>
+            </div>
+            <div class="form-field full">
+              <details id="al-doc-details" class="al-doc">
+                <summary>📄 Datos para el documento del contrato (renovación, garantía abonada, firma)</summary>
+                <div class="hint" style="margin:8px 0;">Opcional. Se guardan en el contrato y se usan al generar el Word/PDF con el botón “📄 Contrato”.</div>
+                <div class="form-grid">
+                  <div class="form-field">
+                    <label for="al-doc-tipo">Tipo de contrato</label>
+                    <select id="al-doc-tipo"><option value="nuevo">Contrato nuevo</option><option value="renovacion">Renovación</option></select>
+                  </div>
+                  <div class="form-field" id="al-doc-prev-wrap" style="display:none;">
+                    <label for="al-doc-prev">Renueva el contrato de…</label>
+                    <select id="al-doc-prev"></select>
+                    <div class="hint">Al elegirlo se copian garantía, abonos, aval, servicios fijos y datos del documento.</div>
+                  </div>
+                  <div class="form-field" id="al-doc-anterior-wrap" style="display:none;">
+                    <label for="al-doc-fecha-anterior">Contrato anterior firmado el</label>
+                    <input type="date" id="al-doc-fecha-anterior" />
+                  </div>
+                  <div class="form-field">
+                    <label for="al-doc-fecha-firma">Fecha de firma</label>
+                    <input type="date" id="al-doc-fecha-firma" />
+                    <div class="hint">Vacío = “a los ……. días” para completar a mano.</div>
+                  </div>
+                  <div class="form-field">
+                    <label for="al-doc-uso">Uso del inmueble</label>
+                    <select id="al-doc-uso"><option value="comercial">Comercial</option><option value="vivienda">Vivienda</option></select>
+                  </div>
+                  <div class="form-field">
+                    <label for="al-doc-aumento">Aumento mínimo en renovación (%)</label>
+                    <input type="number" id="al-doc-aumento" min="0" step="0.5" placeholder="10" />
+                  </div>
+                  <div class="form-field">
+                    <label for="al-doc-modalidad">Modalidad de la garantía</label>
+                    <input type="text" id="al-doc-modalidad" placeholder="Ej. 2x1" />
+                  </div>
+                  <div class="form-field">
+                    <label for="al-doc-penalidad">Penalidad por día adicional</label>
+                    <input type="number" id="al-doc-penalidad" min="0" step="0.01" placeholder="Auto: renta ÷ 30 + 50%" />
+                  </div>
+                  <div class="form-field full">
+                    <label>Abonos de la garantía (monto + N° de recibo)</label>
+                    <div id="al-doc-abonos"></div>
+                    <button type="button" class="btn btn-tertiary btn-sm" id="btn-doc-add-abono" style="margin-top:6px;">+ Agregar abono</button>
+                    <div class="hint" id="al-doc-abonos-resumen"></div>
+                  </div>
+                  <div class="form-field full" id="al-doc-rep-wrap" style="display:none;">
+                    <label>Inquilino empresa — representante y registros</label>
+                    <div class="form-grid">
+                      <div class="form-field"><label for="al-doc-rep-trat">Tratamiento</label><select id="al-doc-rep-trat"><option value="el Sr.">el Sr.</option><option value="la Sra.">la Sra.</option></select></div>
+                      <div class="form-field"><label for="al-doc-rep-nombre">Representante legal</label><input type="text" id="al-doc-rep-nombre" /></div>
+                      <div class="form-field"><label for="al-doc-rep-cargo">Cargo</label><input type="text" id="al-doc-rep-cargo" placeholder="Gerente General" /></div>
+                      <div class="form-field"><label for="al-doc-partida">Partida electrónica N°</label><input type="text" id="al-doc-partida" /></div>
+                      <div class="form-field"><label for="al-doc-oficina">Registros públicos de</label><input type="text" id="al-doc-oficina" placeholder="Lima" /></div>
+                    </div>
+                  </div>
+                </div>
+              </details>
+            </div>
+            <div class="form-field full">
+              <label for="al-notas">Notas</label>
+              <textarea id="al-notas"></textarea>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-tertiary" data-modal-close>Cancelar</button>
+          <button type="submit" class="btn btn-primary" id="btn-guardar-alquiler">Guardar contrato</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ========================== MODAL: CONTRATO VENTA ============================ -->
+  <div class="modal-overlay" id="modal-venta" aria-hidden="true">
+    <div class="modal">
+      <div class="modal-header">
+        <h3 id="modal-venta-title">Nuevo contrato de venta</h3>
+        <button class="modal-close" data-modal-close aria-label="Cerrar">×</button>
+      </div>
+      <form id="form-venta">
+        <div class="modal-body">
+          <div class="form-grid">
+            <div class="form-field full">
+              <label for="ve-seccion">Sección *</label>
+              <select id="ve-seccion" required></select>
+              <div class="error-msg">Selecciona una sección.</div>
+            </div>
+            <div class="form-field">
+              <label for="ve-comprador">Comprador *</label>
+              <select id="ve-comprador" required></select>
+              <div class="error-msg">Selecciona un comprador.</div>
+              <div class="hint">¿No aparece? Créalo primero en Personas con el rol "Comprador".</div>
+            </div>
+            <div class="form-field">
+              <label for="ve-agente">Agente inmobiliario</label>
+              <select id="ve-agente"></select>
+            </div>
+            <div class="form-field">
+              <label for="ve-precio">Precio pactado *</label>
+              <input type="number" id="ve-precio" step="0.01" min="0" required />
+              <div class="error-msg">Ingresa el precio.</div>
+            </div>
+            <div class="form-field">
+              <label for="ve-forma-pago">Forma de pago *</label>
+              <select id="ve-forma-pago" required>
+                <option value="contado">Contado</option>
+                <option value="cuotas">Cuotas</option>
+                <option value="credito_hipotecario">Crédito hipotecario</option>
+              </select>
+            </div>
+            <div class="form-field" id="ve-n-cuotas-field" style="display:none;">
+              <label for="ve-n-cuotas">N° de cuotas *</label>
+              <input type="number" id="ve-n-cuotas" min="2" />
+              <div class="hint">Se generará el cronograma mensual automáticamente.</div>
+            </div>
+            <div class="form-field">
+              <label for="ve-fecha-firma">Fecha de firma *</label>
+              <input type="date" id="ve-fecha-firma" required />
+              <div class="error-msg">Ingresa la fecha de firma.</div>
+            </div>
+            <div class="form-field full">
+              <label class="checkbox-row" style="flex-direction:row; align-items:center; gap:8px;">
+                <input type="checkbox" id="ve-tiene-aval" style="width:auto;" /> ¿Tiene aval?
+              </label>
+            </div>
+            <div class="form-field full" id="ve-aval-field" style="display:none;">
+              <label for="ve-aval">Aval</label>
+              <select id="ve-aval"></select>
+              <div class="hint">¿No aparece? Créalo primero en Personas con el rol "Aval".</div>
+            </div>
+            <div class="form-field full" id="ve-estado-field" style="display:none;">
+              <label for="ve-estado">Estado del contrato</label>
+              <select id="ve-estado">
+                <option value="vigente">Vigente (reserva la sección)</option>
+                <option value="completado">Completado (marca la sección como vendida)</option>
+                <option value="anulado">Anulado (libera la sección)</option>
+              </select>
+            </div>
+            <div class="form-field full" id="ve-comision-field" style="display:none; background:var(--gray-100); padding:12px; border-radius:8px;">
+              <label style="margin-bottom:6px;">Comisión del agente (opcional, solo si seleccionaste uno arriba)</label>
+              <div style="display:flex; gap:12px;">
+                <div style="flex:1;"><input type="number" id="ve-comision-monto" step="0.01" min="0" placeholder="Monto fijo (S/)" /></div>
+                <div style="flex:1;"><input type="number" id="ve-comision-porcentaje" step="0.01" min="0" max="100" placeholder="% del contrato" /></div>
+              </div>
+            </div>
+            <div class="form-field full">
+              <label for="ve-notas">Notas</label>
+              <textarea id="ve-notas"></textarea>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-tertiary" data-modal-close>Cancelar</button>
+          <button type="submit" class="btn btn-primary" id="btn-guardar-venta">Guardar contrato</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script type="module" src="../assets/js/contratos.js"></script>
+</body>
+</html>

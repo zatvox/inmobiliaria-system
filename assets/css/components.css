@@ -330,3 +330,9 @@ table th.sortable.sort-desc::after { content: '▼'; opacity: 1; color: var(--co
 .tcm-reset { margin-top: 8px; width: 100%; border: none; background: var(--gray-100); border-radius: 8px; padding: 7px; font-size: 12px; font-weight: 600; cursor: pointer; color: var(--gray-700); }
 .tcm-reset:hover { background: var(--gray-300); }
 .tcm-shell table.data-table thead th:last-child { padding-right: 44px; }
+
+/* Nota de contexto dentro de un modal (antes era el subtitulo de la cabecera de pagina) */
+.modal-hint { margin: 0 0 var(--space-4); font-size: var(--fs-sm); color: var(--gray-500); line-height: 1.45; }
+
+/* Columna numerica compacta (ej. Dia de vencimiento) */
+.data-table th.n, .data-table td.n { width: 1%; white-space: nowrap; text-align: center; }

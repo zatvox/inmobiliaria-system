@@ -60,16 +60,9 @@
       <main class="content">
         <!-- ===================== VISTA: LISTADO DE PROPIEDADES ===================== -->
         <section id="view-list">
-          <div class="page-header">
-            <div>
-              <h1>Inmuebles</h1>
-              <p class="subtitle">Predios y edificios. Cada uno se divide en secciones (pisos, deptos, lotes) que son la unidad real que se alquila o vende.</p>
-            </div>
-            <button class="btn btn-primary" id="btn-nueva-propiedad" data-admin-only>+ Nueva propiedad</button>
-          </div>
-
-          <div style="margin-bottom:16px; max-width:360px;">
+          <div style="display:flex; gap:12px; margin-bottom:16px; flex-wrap:wrap; align-items:center;">
             <input type="text" id="search-input" placeholder="Buscar por nombre, dirección o distrito…" />
+            <button class="btn btn-primary" id="btn-nueva-propiedad" data-admin-only style="margin-left:auto;">+ Nueva propiedad</button>
           </div>
 
           <div id="propiedades-grid" class="kpi-grid" style="grid-template-columns:repeat(auto-fill, minmax(280px,1fr));">
@@ -131,6 +124,7 @@
       </div>
       <form id="form-propiedad">
         <div class="modal-body">
+        <p class="modal-hint">Cada propiedad se divide en secciones (pisos, deptos, lotes), que son la unidad real que se alquila o vende.</p>
           <div class="form-grid">
             <div class="form-field full">
               <label for="p-nombre">Nombre referencial *</label>
