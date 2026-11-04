@@ -638,7 +638,7 @@ export async function listCuotas({ origen = '', estado = '', search = '', propie
   // Resolver el "deudor" y referencia segun el origen, en llamadas separadas
   // agrupadas (evita N+1 con joins logicos que Supabase no puede hacer directo
   // porque contrato_id apunta a dos tablas distintas segun el origen).
-  const idsAlquiler = data.filter((c) => c.origen === 'alquiler' && c.contrato_id).map((c) => c.contrato_id);
+  const idsAlquiler = data.filter((c) => (c.origen === 'alquiler' || c.origen === 'mantenimiento') && c.contrato_id).map((c) => c.contrato_id);
   const idsVenta = data.filter((c) => c.origen === 'venta' && c.contrato_id).map((c) => c.contrato_id);
   const idsDetalle = data.filter((c) => c.origen === 'servicio' && c.calculo_servicio_detalle_id).map((c) => c.calculo_servicio_detalle_id);
 
@@ -670,7 +670,7 @@ export async function listCuotas({ origen = '', estado = '', search = '', propie
 
   const enriched = data.map((c) => {
     let deudor = '—', referencia = '—', propId = null, tipoServId = null, telefono = null, propiedadNombre = '—';
-    if (c.origen === 'alquiler') {
+    if (c.origen === 'alquiler' || c.origen === 'mantenimiento') {
       const a = mapAlquiler.get(c.contrato_id);
       deudor = a?.inquilino?.nombre ?? '—';
       telefono = a?.inquilino?.telefono ?? null;
@@ -1597,7 +1597,7 @@ export async function getDatosCuotaDocumento(cuotaId) {
     seccion:seccion_id(id, nombre, propiedad_id, propiedades(nombre_referencial, direccion, distrito, propietario:propietario_id(nombre, tipo_documento, dni_ruc))),
     secciones_contrato:contratos_alquiler_secciones(seccion:seccion_id(nombre))`;
   let contrato = null, detalle = null;
-  if (cuota.origen === 'alquiler') {
+  if (cuota.origen === 'alquiler' || cuota.origen === 'mantenimiento') {
     ({ data: contrato } = await supabase.from('contratos_alquiler').select(selContrato).eq('id', cuota.contrato_id).single());
   } else if (cuota.origen === 'servicio') {
     ({ data: detalle } = await supabase.from('calculo_servicios_detalle')
@@ -1632,5 +1632,146 @@ export async function listCobroTipos() {
 }
 export async function saveCobroTipos(filas) {
   const { error } = await supabase.from('cobro_tipos').upsert(filas, { onConflict: 'tipo_clave' });
+  if (error) throw error;
+}
+
+
+/* ============== MANTENIMIENTO COMO CARPETA (SQL 31) ============== */
+export async function getCarpetaMantenimiento(id) {
+  const [m, gastos, eventos, reparto] = await Promise.all([
+    (async () => {
+      const base = '*, propiedad:propiedad_id(id, nombre_referencial, direccion, distrito, propietario:propietario_id(id, nombre)), seccion:seccion_id(nombre), proveedor:proveedor_id(nombre)';
+      const r = await supabase.from('mantenimientos').select(`${base}, equipo_ref:equipo_id(id, nombre, marca, modelo, nro_serie)`).eq('id', id).single();
+      if (!r.error) return r;
+      return supabase.from('mantenimientos').select(base).eq('id', id).single(); // SQL 32 pendiente
+    })(),
+    supabase.from('mantenimiento_gastos').select('*').eq('mantenimiento_id', id).order('fecha').order('created_at'),
+    supabase.from('mantenimiento_eventos').select('*').eq('mantenimiento_id', id).order('fecha_hora'),
+    supabase.from('mantenimiento_reparto').select('*, cuota:cuota_id(id, estado, monto, nro_cobro, fecha_vencimiento, pagos(monto, estado))').eq('mantenimiento_id', id).order('orden'),
+  ]);
+  if (m.error) throw m.error;
+  if (gastos.error) throw gastos.error;
+  if (eventos.error) throw eventos.error;
+  const repartoData = reparto.error ? [] : (reparto.data ?? []); // cuota.nro_cobro requiere SQL 29
+  return { ...m.data, gastos: gastos.data ?? [], eventos: eventos.data ?? [], reparto: repartoData };
+}
+
+export async function saveGastoMantenimiento(mantenimientoId, payload, id = '') {
+  const q = id
+    ? supabase.from('mantenimiento_gastos').update(payload).eq('id', id)
+    : supabase.from('mantenimiento_gastos').insert({ mantenimiento_id: mantenimientoId, ...payload });
+  const { error } = await q;
+  if (error) throw error;
+}
+export async function deleteGastoMantenimiento(id) {
+  const { error } = await supabase.from('mantenimiento_gastos').delete().eq('id', id);
+  if (error) throw error;
+}
+export async function saveEventoMantenimiento(mantenimientoId, payload, id = '') {
+  const q = id
+    ? supabase.from('mantenimiento_eventos').update(payload).eq('id', id)
+    : supabase.from('mantenimiento_eventos').insert({ mantenimiento_id: mantenimientoId, ...payload });
+  const { error } = await q;
+  if (error) throw error;
+}
+export async function deleteEventoMantenimiento(id) {
+  const { error } = await supabase.from('mantenimiento_eventos').delete().eq('id', id);
+  if (error) throw error;
+}
+
+// Participantes sugeridos para el reparto por m²: cada inquilino vigente de la
+// propiedad (suma de las secciones de su contrato) + el propietario por las
+// secciones sin contrato vigente (puedes ajustar el m² a mano).
+export async function sugerirRepartoMantenimiento(propiedadId) {
+  const [{ data: secciones, error: e1 }, { data: contratos, error: e2 }, { data: prop, error: e3 }] = await Promise.all([
+    supabase.from('secciones').select('id, nombre, area_m2').eq('propiedad_id', propiedadId),
+    supabase.from('contratos_alquiler')
+      .select(`id, estado, inquilino:inquilino_id(id, nombre),
+        seccion:seccion_id(id, nombre, area_m2, propiedad_id),
+        secciones_contrato:contratos_alquiler_secciones(seccion:seccion_id(id, nombre, area_m2))`)
+      .in('estado', ['vigente', 'por_vencer']),
+    supabase.from('propiedades').select('propietario:propietario_id(id, nombre)').eq('id', propiedadId).single(),
+  ]);
+  if (e1) throw e1;
+  if (e2) throw e2;
+  if (e3) throw e3;
+  const ocupadas = new Set();
+  const filas = [];
+  const idsProp = new Set((secciones ?? []).map((x) => x.id));
+  (contratos ?? []).forEach((c) => {
+    const lista = [];
+    const add = (sx) => { if (sx && idsProp.has(sx.id) && !lista.find((x) => x.id === sx.id)) lista.push(sx); };
+    add(c.seccion);
+    (c.secciones_contrato ?? []).forEach((sc) => add(sc.seccion));
+    if (!lista.length) return;
+    lista.forEach((x) => ocupadas.add(x.id));
+    filas.push({
+      tipo: 'inquilino', contrato_alquiler_id: c.id, persona_id: c.inquilino?.id ?? null, nombre: c.inquilino?.nombre ?? '—',
+      detalle: lista.map((x) => x.nombre).join(' + '), base_m2: lista.reduce((t, x) => t + Number(x.area_m2 ?? 0), 0),
+    });
+  });
+  const libres = (secciones ?? []).filter((x) => !ocupadas.has(x.id));
+  filas.push({
+    tipo: 'propietario', contrato_alquiler_id: null, persona_id: prop?.propietario?.id ?? null, nombre: prop?.propietario?.nombre ?? 'Propietario',
+    detalle: libres.length ? libres.map((x) => x.nombre).join(' + ') : 'Sin áreas libres (ajusta el m²)', base_m2: libres.reduce((t, x) => t + Number(x.area_m2 ?? 0), 0),
+  });
+  return filas;
+}
+
+export async function guardarRepartoMantenimiento(mantenimientoId, filas) {
+  const { data: actuales, error } = await supabase.from('mantenimiento_reparto').select('id, cuota_id').eq('mantenimiento_id', mantenimientoId);
+  if (error) throw error;
+  const conservar = new Set(filas.filter((f) => f.id).map((f) => f.id));
+  const borrar = (actuales ?? []).filter((a) => !conservar.has(a.id) && !a.cuota_id).map((a) => a.id);
+  if (borrar.length) {
+    const { error: e2 } = await supabase.from('mantenimiento_reparto').delete().in('id', borrar);
+    if (e2) throw e2;
+  }
+  for (const [i, f] of filas.entries()) {
+    const row = { tipo: f.tipo, contrato_alquiler_id: f.contrato_alquiler_id ?? null, persona_id: f.persona_id ?? null, nombre: f.nombre, detalle: f.detalle ?? null,
+      base_m2: f.base_m2, porcentaje: f.porcentaje, monto: f.monto, orden: i };
+    const q = f.id
+      ? supabase.from('mantenimiento_reparto').update(row).eq('id', f.id)
+      : supabase.from('mantenimiento_reparto').insert({ mantenimiento_id: mantenimientoId, ...row });
+    const { error: e3 } = await q;
+    if (e3) throw e3;
+  }
+}
+
+// Crea una cuota (origen 'mantenimiento') por cada inquilino con monto > 0 que aún no la tenga.
+export async function generarCuotasMantenimiento(mantenimientoId, { fechaVencimiento, concepto }) {
+  const { data: filas, error } = await supabase.from('mantenimiento_reparto').select('*').eq('mantenimiento_id', mantenimientoId);
+  if (error) throw error;
+  const pendientes = (filas ?? []).filter((f) => f.tipo === 'inquilino' && Number(f.monto) > 0 && !f.cuota_id && f.contrato_alquiler_id);
+  let creadas = 0;
+  for (const f of pendientes) {
+    const { data: cuota, error: e1 } = await supabase.from('cuotas').insert({
+      origen: 'mantenimiento', contrato_id: f.contrato_alquiler_id, concepto, monto: f.monto, fecha_vencimiento: fechaVencimiento, estado: 'pendiente',
+    }).select('id').single();
+    if (e1) throw e1;
+    const { error: e2 } = await supabase.from('mantenimiento_reparto').update({ cuota_id: cuota.id }).eq('id', f.id);
+    if (e2) throw e2;
+    creadas += 1;
+  }
+  return { creadas, omitidas: (filas ?? []).filter((f) => f.tipo === 'inquilino' && f.cuota_id).length };
+}
+
+
+/* ===================== EQUIPOS POR EDIFICIO (SQL 32) ===================== */
+export async function listEquipos({ propiedadId = '' } = {}) {
+  let q = supabase.from('equipos_edificio').select('*, propiedad:propiedad_id(nombre_referencial), seccion:seccion_id(nombre)').order('nombre');
+  if (propiedadId) q = q.eq('propiedad_id', propiedadId);
+  const { data, error } = await q;
+  if (error) throw error;
+  return data ?? [];
+}
+export async function saveEquipo(payload, id = '') {
+  const q = id ? supabase.from('equipos_edificio').update(payload).eq('id', id) : supabase.from('equipos_edificio').insert(payload);
+  const { data, error } = await q.select().single();
+  if (error) throw error;
+  return data;
+}
+export async function deleteEquipo(id) {
+  const { error } = await supabase.from('equipos_edificio').delete().eq('id', id);
   if (error) throw error;
 }

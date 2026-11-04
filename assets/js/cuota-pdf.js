@@ -46,7 +46,7 @@ function numeroALetras(monto, moneda = 'PEN') {
 
 const COLORES_SERIE = { ALQ: '#1D4ED8', SAGUA: '#0891B2', SLUZ: '#D97706' };
 // Misma regla que el SQL: alquiler = 'ALQ'; servicio = 'S' + nombre sin tildes/espacios (máx. 6).
-export const claveTipoCuota = (origen, nombreServicio = '') => (origen === 'servicio'
+export const claveTipoCuota = (origen, nombreServicio = '') => (origen === 'mantenimiento' ? 'MANT' : origen === 'servicio'
   ? 'S' + nombreServicio.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^A-Za-z]/g, '').toUpperCase().slice(0, 6)
   : 'ALQ');
 const cargarTipos = async () => {
@@ -84,10 +84,12 @@ function htmlCuotaBloque(d) {
   const sim = moneda === 'USD' ? '$' : 'S/';
   const esServicio = cuota.origen === 'servicio';
   const tipoServ = detalle?.calculo_periodo?.tipo_servicio?.nombre ?? '';
-  const concepto = cuota.concepto || (esServicio ? `Servicio de ${tipoServ}` : 'Renta mensual');
+  const esMant = cuota.origen === 'mantenimiento';
+  const concepto = cuota.concepto || (esServicio ? `Servicio de ${tipoServ}` : (esMant ? 'Mantenimiento' : 'Renta mensual'));
   // Periodo que cubre: alquiler = del día de vencimiento al mismo día del mes siguiente; servicio = mes del consumo.
   const periodo = esServicio
     ? periodoLargo(detalle?.calculo_periodo?.periodo)
+    : esMant ? 'Cuota única'
     : `${dmy(cuota.fecha_vencimiento)} al ${sumarMes(cuota.fecha_vencimiento)}`;
   const importe = Number(cuota.monto) + Number(cuota.mora_aplicada || 0);
   const pagos = (cuota.pagos ?? []).filter((p) => p.estado !== 'anulado');
@@ -156,7 +158,7 @@ function htmlCuotaBloque(d) {
       <div class="bc">
         <div class="bf"><span class="k">VENCIMIENTO</span><b>${esc(dmy(cuota.fecha_vencimiento))}</b></div>
         <div class="bf"><span class="k">CONTRATO</span><span>${esc(vigencia)}</span></div>
-        <div class="bf"><span class="k">${esServicio ? 'SERVICIO' : 'CUOTA N°'}</span><span>${esc(esServicio ? tipoServ : (cuota.numero_cuota ?? '—'))}</span></div>
+        <div class="bf"><span class="k">${esServicio ? 'SERVICIO' : (esMant ? 'TIPO' : 'CUOTA N°')}</span><span>${esc(esServicio ? tipoServ : (esMant ? 'Mantenimiento del edificio' : (cuota.numero_cuota ?? '—')))}</span></div>
       </div>
     </div>
 

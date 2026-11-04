@@ -60,6 +60,7 @@
       <main class="content">
         <div class="tabs">
           <button class="tab-btn active" data-tab="mantenimientos">Mantenimientos</button>
+          <button class="tab-btn" data-tab="equipos">Equipos</button>
           <button class="tab-btn" data-tab="tributos">Tributos municipales</button>
         </div>
 
@@ -67,12 +68,26 @@
         <div class="tab-panel" id="panel-mantenimientos">
           <div class="page-header" style="margin-bottom:12px;">
             <select id="filtro-mant-propiedad" class="select-propiedad filtro" style="max-width:280px;"></select>
-            <button class="btn btn-primary" id="btn-nuevo-mantenimiento" data-admin-only>+ Nuevo mantenimiento</button>
+            <button class="btn btn-primary" id="btn-nuevo-mantenimiento" data-admin-only>+ Nuevo trabajo</button>
           </div>
           <div class="table-wrap">
             <table class="data-table">
-              <thead><tr><th>Propiedad</th><th>Sección</th><th>Tipo</th><th>Descripción</th><th>Costo total</th><th>Fecha</th><th></th></tr></thead>
+              <thead><tr><th>Propiedad</th><th>Trabajo</th><th>Equipo</th><th>Estado</th><th>Total</th><th>Inicio</th><th></th></tr></thead>
               <tbody id="mantenimientos-tbody"><tr><td colspan="7"><div class="skeleton" style="height:20px;"></div></td></tr></tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- ================================ EQUIPOS ================================ -->
+        <div class="tab-panel" id="panel-equipos" style="display:none;">
+          <div class="page-header" style="margin-bottom:12px;">
+            <select id="filtro-eq-propiedad" class="select-propiedad filtro" style="max-width:280px;"></select>
+            <button class="btn btn-primary" id="btn-nuevo-equipo" data-admin-only>+ Nuevo equipo</button>
+          </div>
+          <div class="table-wrap">
+            <table class="data-table">
+              <thead><tr><th>Edificio</th><th>Equipo</th><th>Categoría</th><th>Ubicación</th><th>Marca / modelo</th><th>Estado</th><th>Último trabajo</th><th>Próximo mant.</th><th>Trabajos</th><th>Costo acumulado</th><th></th></tr></thead>
+              <tbody id="equipos-tbody"><tr><td colspan="11"><div class="skeleton" style="height:20px;"></div></td></tr></tbody>
             </table>
           </div>
         </div>
@@ -101,16 +116,16 @@
     </div>
   </div>
 
-  <!-- ========================== MODAL: MANTENIMIENTO ========================== -->
+  <!-- ========================== MODAL: NUEVO TRABAJO ========================== -->
   <div class="modal-overlay" id="modal-mantenimiento" aria-hidden="true">
     <div class="modal">
       <div class="modal-header">
-        <h3 id="modal-mantenimiento-title">Nuevo mantenimiento</h3>
+        <h3 id="modal-mantenimiento-title">Nuevo trabajo de mantenimiento</h3>
         <button class="modal-close" data-modal-close aria-label="Cerrar">×</button>
       </div>
       <form id="form-mantenimiento">
         <div class="modal-body">
-        <p class="modal-hint">Gasto del propietario: no se cobra a los inquilinos.</p>
+          <p class="modal-hint">Cada trabajo es una carpeta: aquí solo lo básico. Luego registras la bitácora, los gastos con sus comprobantes y el reparto entre inquilinos dentro de la carpeta.</p>
           <div class="form-grid">
             <div class="form-field">
               <label for="mt-propiedad">Propiedad *</label>
@@ -120,6 +135,17 @@
               <label for="mt-seccion">Sección (opcional)</label>
               <select id="mt-seccion"><option value="">Todo el predio (sin sección específica)</option></select>
             </div>
+            <div class="form-field full">
+              <label for="mt-descripcion">Título del trabajo *</label>
+              <input type="text" id="mt-descripcion" required placeholder="Ej. Reparación de motobomba del 1er piso" />
+              <div class="error-msg">Ingresa un título.</div>
+            </div>
+            <div class="form-field">
+              <label for="mt-equipo">Equipo / sistema afectado</label>
+              <select id="mt-equipo-id"><option value="">— Sin equipo —</option></select>
+              <input type="text" id="mt-equipo" placeholder="Nombre del equipo (no registrado)" style="display:none; margin-top:6px;" />
+              <div class="hint">Lista de equipos del edificio (se registran en la pestaña “Equipos”).</div>
+            </div>
             <div class="form-field">
               <label for="mt-tipo">Tipo</label>
               <select id="mt-tipo"></select>
@@ -128,71 +154,103 @@
               <label for="mt-proveedor">Proveedor / contratista</label>
               <select id="mt-proveedor"></select>
             </div>
-            <div class="form-field full">
-              <label for="mt-descripcion">Descripción *</label>
-              <input type="text" id="mt-descripcion" required placeholder="Ej. Mantenimiento de tanque elevado" />
-              <div class="error-msg">Ingresa una descripción.</div>
-            </div>
             <div class="form-field">
-              <label for="mt-fecha">Fecha *</label>
+              <label for="mt-fecha">Fecha de inicio *</label>
               <input type="date" id="mt-fecha" required />
             </div>
             <div class="form-field">
               <label for="mt-estado">Estado</label>
               <select id="mt-estado">
-                <option value="planificado">Planificado</option>
+                <option value="reportado">Reportado</option>
                 <option value="en_proceso">En proceso</option>
-                <option value="finalizado">Finalizado</option>
+                <option value="esperando_repuesto">Esperando repuesto</option>
+                <option value="terminado">Terminado</option>
               </select>
             </div>
             <div class="form-field">
-              <label for="mt-materiales">Costo de materiales (S/)</label>
-              <input type="number" id="mt-materiales" step="0.01" min="0" value="0" />
+              <label for="mt-comision">Mi comisión como contratista (%)</label>
+              <input type="number" id="mt-comision" step="0.01" min="0" max="100" value="0" />
             </div>
             <div class="form-field">
-              <label for="mt-mano-obra">Costo de mano de obra (S/)</label>
-              <input type="number" id="mt-mano-obra" step="0.01" min="0" value="0" />
+              <label for="mt-presupuesto">Presupuesto inicial (S/, opcional)</label>
+              <input type="number" id="mt-presupuesto" step="0.01" min="0" />
             </div>
             <div class="form-field full">
-              <strong>Costo total: <span id="mt-costo-total">S/ 0.00</span></strong>
+              <label for="mt-problema">¿Qué problema se reportó?</label>
+              <textarea id="mt-problema" rows="2" placeholder="Ej. La motobomba suena como si bombeara pero no sale agua; los sensores están bien."></textarea>
             </div>
-            <div class="form-field full">
-              <label for="mt-notas">Notas</label>
-              <textarea id="mt-notas"></textarea>
-            </div>
-          </div>
-
-          <div id="mt-comprobantes-section" style="display:none; border-top:1px solid var(--gray-300); padding-top:16px; margin-top:8px;">
-            <h4 style="margin-bottom:10px;">Comprobantes (facturas / boletas)</h4>
-            <div id="mt-comprobantes-list" style="margin-bottom:14px;"></div>
-            <div class="form-grid">
-              <div class="form-field">
-                <label for="mt-comprobante-tipo">Tipo</label>
-                <select id="mt-comprobante-tipo">
-                  <option value="factura">Factura</option>
-                  <option value="boleta">Boleta</option>
-                  <option value="otro">Otro</option>
-                </select>
-              </div>
-              <div class="form-field">
-                <label for="mt-comprobante-monto">Monto (opcional)</label>
-                <input type="number" id="mt-comprobante-monto" step="0.01" min="0" />
-              </div>
-              <div class="form-field full">
-                <label for="mt-comprobante-descripcion">Descripción</label>
-                <input type="text" id="mt-comprobante-descripcion" placeholder="Ej. Compra de tubería PVC" />
-              </div>
-              <div class="form-field full">
-                <label for="mt-comprobante-file">Archivo (foto o PDF) *</label>
-                <input type="file" id="mt-comprobante-file" accept="image/*,.pdf" />
-              </div>
-            </div>
-            <button type="button" class="btn btn-secondary" id="btn-agregar-comprobante">+ Agregar comprobante</button>
           </div>
         </div>
         <div class="modal-footer">
-          <button type="button" class="btn btn-tertiary" data-modal-close>Cerrar</button>
-          <button type="submit" class="btn btn-primary" id="btn-guardar-mantenimiento">Guardar mantenimiento</button>
+          <button type="button" class="btn btn-tertiary" data-modal-close>Cancelar</button>
+          <button type="submit" class="btn btn-primary" id="btn-guardar-mantenimiento">Crear y abrir carpeta</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ========================== MODAL: CARPETA DEL TRABAJO ========================== -->
+  <div class="modal-overlay" id="modal-mant-carpeta" aria-hidden="true">
+    <div class="modal" style="max-width:1100px; width:96vw;">
+      <div class="modal-header">
+        <div>
+          <h3 id="mc-titulo" style="margin:0;">Trabajo</h3>
+          <div id="mc-sub" style="font-size:12px; color:var(--gray-500);"></div>
+        </div>
+        <div style="display:flex; gap:8px; align-items:center; margin-left:auto; margin-right:12px;">
+          <select id="mc-estado" style="max-width:200px;"></select>
+          <button type="button" class="btn btn-secondary" id="mc-informe">📄 Informe PDF</button>
+        </div>
+        <button class="modal-close" data-modal-close aria-label="Cerrar">×</button>
+      </div>
+      <div class="modal-body" style="max-height:78vh; overflow:auto;">
+        <div class="kpi-mini" id="mc-kpis" style="margin-bottom:12px;"></div>
+        <div class="tabs" style="margin-bottom:14px;">
+          <button class="tab-btn mc-tab active" data-mc="resumen">📋 Ficha</button>
+          <button class="tab-btn mc-tab" data-mc="bitacora">🕒 Bitácora</button>
+          <button class="tab-btn mc-tab" data-mc="gastos">🧾 Gastos</button>
+          <button class="tab-btn mc-tab" data-mc="reparto">👥 Reparto y cobro</button>
+        </div>
+        <div id="mc-body"></div>
+      </div>
+    </div>
+  </div>
+  <style>
+    .mc-add { background:var(--gray-100); border-radius:10px; padding:12px; }
+    .mc-ev { border-left:3px solid var(--color-primary); background:#fff; border-radius:6px; box-shadow:0 1px 2px rgba(16,24,40,.08); padding:8px 12px; margin-bottom:8px; font-size:13px; }
+    .mc-ev-h { display:flex; gap:10px; align-items:baseline; margin-bottom:3px; }
+    .mut { color:var(--gray-500); font-size:12px; }
+    #mc-kpis { display:grid; grid-template-columns:repeat(5, 1fr); gap:10px; }
+  </style>
+
+  <!-- ============================ MODAL: EQUIPO ============================ -->
+  <div class="modal-overlay" id="modal-equipo" aria-hidden="true">
+    <div class="modal">
+      <div class="modal-header">
+        <h3 id="modal-equipo-title">Nuevo equipo</h3>
+        <button class="modal-close" data-modal-close aria-label="Cerrar">×</button>
+      </div>
+      <form id="form-equipo">
+        <div class="modal-body">
+          <div class="form-grid">
+            <div class="form-field"><label for="eq-propiedad">Edificio *</label><select id="eq-propiedad" class="select-propiedad" required></select></div>
+            <div class="form-field"><label for="eq-seccion">Sección (opcional)</label><select id="eq-seccion"><option value="">Todo el edificio</option></select></div>
+            <div class="form-field full"><label for="eq-nombre">Nombre del equipo *</label><input type="text" id="eq-nombre" required placeholder="Ej. Motobomba 1er piso" /><div class="error-msg">Ingresa el nombre.</div></div>
+            <div class="form-field"><label for="eq-categoria">Categoría</label><input type="text" id="eq-categoria" list="eq-categorias" placeholder="Ej. Bombeo" /><datalist id="eq-categorias"><option value="Bombeo"><option value="Agua / tanques"><option value="Eléctrico"><option value="Ascensor"><option value="Seguridad"><option value="Gas"><option value="Otro"></datalist></div>
+            <div class="form-field"><label for="eq-ubicacion">Ubicación</label><input type="text" id="eq-ubicacion" placeholder="Ej. Cuarto de bombas, 1er piso" /></div>
+            <div class="form-field"><label for="eq-marca">Marca</label><input type="text" id="eq-marca" /></div>
+            <div class="form-field"><label for="eq-modelo">Modelo</label><input type="text" id="eq-modelo" /></div>
+            <div class="form-field"><label for="eq-serie">N° de serie</label><input type="text" id="eq-serie" /></div>
+            <div class="form-field"><label for="eq-estado">Estado</label><select id="eq-estado"><option value="operativo">Operativo</option><option value="en_mantenimiento">En mantenimiento</option><option value="fuera_de_servicio">Fuera de servicio</option><option value="dado_de_baja">Dado de baja</option></select></div>
+            <div class="form-field"><label for="eq-instalacion">Fecha de instalación</label><input type="date" id="eq-instalacion" /></div>
+            <div class="form-field"><label for="eq-garantia">Garantía hasta</label><input type="date" id="eq-garantia" /></div>
+            <div class="form-field"><label for="eq-frecuencia">Mantenimiento preventivo cada (meses)</label><input type="number" id="eq-frecuencia" min="1" step="1" placeholder="Ej. 6" /><div class="hint">Con esto el sistema calcula el próximo mantenimiento.</div></div>
+            <div class="form-field full"><label for="eq-notas">Notas</label><textarea id="eq-notas"></textarea></div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-tertiary" data-modal-close>Cancelar</button>
+          <button type="submit" class="btn btn-primary" id="btn-guardar-equipo">Guardar equipo</button>
         </div>
       </form>
     </div>

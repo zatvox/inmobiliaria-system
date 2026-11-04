@@ -108,7 +108,7 @@ main();
 
 
 /* ======================= SERIES Y COLORES DE LAS CUOTAS ======================= */
-const COLORES_DEF = { ALQ: '#1D4ED8', SAGUA: '#0891B2', SLUZ: '#D97706' };
+const COLORES_DEF = { ALQ: '#1D4ED8', SAGUA: '#0891B2', SLUZ: '#D97706', MANT: '#7C3AED' };
 const COLORES_EXTRA = ['#7C3AED', '#059669', '#DB2777', '#0D9488', '#B45309'];
 let filasCobro = [];
 
@@ -118,7 +118,7 @@ async function cargarCobroTipos() {
   try {
     const [guardados, servicios] = await Promise.all([listCobroTipos().catch(() => []), listTiposServicio()]);
     const mapa = new Map(guardados.map((t) => [t.tipo_clave, t]));
-    const lista = [{ clave: 'ALQ', etiqueta: 'Alquiler' }, ...servicios.map((t) => ({ clave: claveTipoCuota('servicio', t.nombre), etiqueta: `Servicio · ${t.nombre}` }))];
+    const lista = [{ clave: 'ALQ', etiqueta: 'Alquiler' }, { clave: 'MANT', etiqueta: 'Mantenimiento' }, ...servicios.map((t) => ({ clave: claveTipoCuota('servicio', t.nombre), etiqueta: `Servicio · ${t.nombre}` }))];
     let extra = 0;
     filasCobro = lista.map((t) => {
       const g = mapa.get(t.clave);
