@@ -13,6 +13,30 @@
 <style>
   .al-doc { border:1px solid var(--gray-200,#E5E7EB); border-radius:10px; padding:10px 14px; background:#FAFAFB; }
   .al-doc > summary { cursor:pointer; font-weight:600; }
+  .ms-filtro { position:relative; }
+  .ms-filtro > summary { list-style:none; cursor:pointer; padding:9px 14px; border:1px solid var(--gray-300,#D1D5DB); border-radius:8px; background:#fff; font-size:14px; white-space:nowrap; user-select:none; }
+  .ms-filtro > summary::-webkit-details-marker { display:none; }
+  .ms-filtro > summary::after { content:' ▾'; color:var(--gray-500,#6B7280); }
+  .ms-panel { position:absolute; z-index:30; top:calc(100% + 4px); left:0; min-width:200px; background:#fff; border:1px solid var(--gray-200,#E5E7EB); border-radius:8px; box-shadow:0 8px 24px rgba(0,0,0,.12); padding:8px; display:flex; flex-direction:column; gap:2px; }
+  .ms-panel label { display:flex; align-items:center; gap:8px; padding:7px 8px; border-radius:6px; cursor:pointer; font-size:14px; font-weight:400; }
+  .ms-panel label:hover { background:var(--gray-100,#F3F4F6); }
+  .ms-panel input { width:auto; }
+  .tipo-chip { display:inline-block; font-size:10px; font-weight:700; letter-spacing:.4px; padding:1px 7px; border-radius:999px; margin-right:6px; vertical-align:middle; }
+  .tipo-chip.alq { background:#DBEAFE; color:#1D4ED8; } .tipo-chip.pres { background:#CCFBF1; color:#0F766E; }
+  .tipo-opciones { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+  .tipo-op { border:1px solid var(--gray-200,#E5E7EB); border-radius:12px; padding:18px 14px; background:#fff; cursor:pointer; text-align:left; font:inherit; }
+  .tipo-op:hover { border-color:#1B3A5C; box-shadow:0 2px 10px rgba(27,58,92,.15); }
+  .tipo-op .ico { font-size:26px; } .tipo-op strong { display:block; margin:6px 0 2px; } .tipo-op span { font-size:12px; color:var(--gray-500,#6B7280); }
+  .pr-cron-wrap { max-height:340px; overflow:auto; border:1px solid var(--gray-200,#E5E7EB); border-radius:8px; }
+  .pr-cron { width:100%; border-collapse:collapse; font-size:13px; }
+  .pr-cron th { position:sticky; top:0; background:#F1F5F9; text-align:right; padding:7px 8px; font-size:12px; }
+  .pr-cron th:first-child, .pr-cron td:first-child { text-align:center; }
+  .pr-cron td { padding:4px 8px; text-align:right; border-top:1px solid #EEF2F6; }
+  .pr-cron input { width:100%; min-width:0; padding:4px 6px; text-align:right; font-size:13px; }
+  .pr-cron input[type=date] { text-align:left; }
+  .pr-cron tfoot td { font-weight:700; background:#F8FAFC; border-top:2px solid #CBD5E1; }
+  .pr-resumen { display:flex; gap:18px; flex-wrap:wrap; font-size:13px; margin:8px 0; }
+  .pr-resumen b { font-size:15px; }
 </style>
 </head>
 <body data-page="contratos">
@@ -63,19 +87,26 @@
 
       <main class="content">
         <div class="tabs">
-          <button class="tab-btn active" data-tab="alquiler">Alquiler</button>
+          <button class="tab-btn active" data-tab="alquiler">Alquiler y préstamos</button>
           <button class="tab-btn" data-tab="venta">Venta</button>
           <button class="btn btn-primary" id="btn-nuevo-contrato" data-admin-only style="margin-left:auto; align-self:center;">+ Nuevo contrato</button>
         </div>
 
-        <div style="margin-bottom:16px;">
-          <input type="text" id="search-input" placeholder="Buscar por inquilino/comprador, sección o propiedad…" style="max-width:360px;" />
+        <div style="margin-bottom:16px; display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+          <input type="text" id="search-input" placeholder="Buscar por inquilino/prestatario/comprador, sección o propiedad…" style="max-width:360px; flex:1; min-width:220px;" />
+          <details class="ms-filtro" id="filtro-tipo">
+            <summary id="filtro-tipo-resumen">Tipo: Alquiler y préstamos</summary>
+            <div class="ms-panel">
+              <label><input type="checkbox" value="alquiler" checked /> Alquiler</label>
+              <label><input type="checkbox" value="prestamo" checked /> Préstamos</label>
+            </div>
+          </details>
         </div>
 
         <div class="tab-panel active" id="panel-alquiler">
           <div class="table-wrap">
             <table class="data-table">
-              <thead><tr><th>Edificio</th><th>Distrito</th><th>Ubicación</th><th>Inquilino</th><th>Renta</th><th class="n">Día</th><th data-oculta-default>Vigencia</th><th>Estado</th><th>Vencimiento</th><th></th></tr></thead>
+              <thead><tr><th>Edificio</th><th>Distrito</th><th>Ubicación</th><th>Inquilino / Prestatario</th><th>Renta / Cuota</th><th class="n">Día</th><th data-oculta-default>Vigencia</th><th>Estado</th><th>Vencimiento</th><th></th></tr></thead>
               <tbody id="alquiler-tbody"><tr><td colspan="9"><div class="skeleton" style="height:20px;"></div></td></tr></tbody>
             </table>
           </div>
@@ -270,6 +301,125 @@
         <div class="modal-footer">
           <button type="button" class="btn btn-tertiary" data-modal-close>Cancelar</button>
           <button type="submit" class="btn btn-primary" id="btn-guardar-alquiler">Guardar contrato</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ========================= MODAL: ELEGIR TIPO DE CONTRATO ========================= -->
+  <div class="modal-overlay" id="modal-tipo-contrato" aria-hidden="true">
+    <div class="modal" style="max-width:520px;">
+      <div class="modal-header">
+        <h3>Nuevo contrato</h3>
+        <button class="modal-close" data-modal-close aria-label="Cerrar">×</button>
+      </div>
+      <div class="modal-body">
+        <p class="modal-hint">¿Qué tipo de contrato vas a crear?</p>
+        <div class="tipo-opciones">
+          <button type="button" class="tipo-op" data-nuevo="alquiler"><div class="ico">🏢</div><strong>Alquiler</strong><span>Secciones, renta mensual, garantía, servicios.</span></button>
+          <button type="button" class="tipo-op" data-nuevo="prestamo"><div class="ico">💵</div><strong>Préstamo con intereses</strong><span>Monto, cuotas, tasa y cronograma de pagos.</span></button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========================= MODAL: CONTRATO PRÉSTAMO ========================= -->
+  <div class="modal-overlay" id="modal-prestamo" aria-hidden="true">
+    <div class="modal" style="max-width:980px; width:96vw;">
+      <div class="modal-header">
+        <h3 id="modal-prestamo-title">Nuevo contrato de préstamo</h3>
+        <button class="modal-close" data-modal-close aria-label="Cerrar">×</button>
+      </div>
+      <form id="form-prestamo">
+        <div class="modal-body" style="max-height:74vh; overflow:auto;">
+          <p class="modal-hint">Las cuotas son iguales: capital = monto ÷ n.º de cuotas e interés = monto × tasa mensual. Se generan como cuotas por cobrar (serie PRES) en Cobranzas.</p>
+          <div id="pr-bloqueo" class="ct-aviso" style="display:none; background:#FEF3C7; border:1px solid #F59E0B; color:#92400E; border-radius:8px; padding:10px 14px; margin-bottom:10px; font-size:13px;"></div>
+          <div class="form-grid">
+            <div class="form-field">
+              <label for="pr-prestamista">Prestamista (quien presta) *</label>
+              <select id="pr-prestamista" required></select>
+              <div class="error-msg">Selecciona al prestamista.</div>
+            </div>
+            <div class="form-field">
+              <label for="pr-prestatario">Prestatario (quien recibe) *</label>
+              <select id="pr-prestatario" required></select>
+              <div class="error-msg">Selecciona al prestatario.</div>
+              <div class="hint">Puedes elegir entre todos los contactos de Personas.</div>
+            </div>
+            <div class="form-field">
+              <label for="pr-moneda">Moneda</label>
+              <select id="pr-moneda"><option value="PEN">Soles (PEN)</option><option value="USD">Dólares (USD)</option></select>
+            </div>
+            <div class="form-field">
+              <label for="pr-monto">Monto del préstamo *</label>
+              <input type="number" id="pr-monto" step="0.01" min="0.01" required />
+              <div class="error-msg">Ingresa el monto.</div>
+            </div>
+            <div class="form-field">
+              <label for="pr-ncuotas">N.º de cuotas *</label>
+              <input type="number" id="pr-ncuotas" step="1" min="1" max="480" required />
+              <div class="error-msg">Ingresa el n.º de cuotas.</div>
+            </div>
+            <div class="form-field">
+              <label for="pr-tasa">Tasa de interés *</label>
+              <div style="display:flex; gap:8px;">
+                <input type="number" id="pr-tasa" step="0.0001" min="0" required style="flex:1; min-width:0;" />
+                <select id="pr-tasa-tipo" style="width:130px;"><option value="mensual">% mensual</option><option value="anual">% anual</option></select>
+              </div>
+              <div class="hint" id="pr-tasa-hint">Anual se convierte a mensual dividiendo entre 12.</div>
+            </div>
+            <div class="form-field">
+              <label for="pr-fecha-desembolso">Fecha de desembolso *</label>
+              <input type="date" id="pr-fecha-desembolso" required />
+              <div class="error-msg">Ingresa la fecha.</div>
+            </div>
+            <div class="form-field">
+              <label for="pr-fecha-primera">Fecha de la 1.ª cuota *</label>
+              <input type="date" id="pr-fecha-primera" required />
+              <div class="hint">El día de pago de las siguientes cuotas sale de esta fecha.</div>
+            </div>
+            <div class="form-field full">
+              <label class="checkbox-row" style="flex-direction:row; align-items:center; gap:8px;">
+                <input type="checkbox" id="pr-tiene-aval" style="width:auto;" /> ¿Tiene aval?
+              </label>
+            </div>
+            <div class="form-field full" id="pr-aval-field" style="display:none;">
+              <label for="pr-aval">Aval</label>
+              <select id="pr-aval"></select>
+            </div>
+            <div class="form-field full">
+              <label for="pr-garantia">Garantía / respaldo (opcional)</label>
+              <input type="text" id="pr-garantia" placeholder="Ej. Pagaré firmado, letra de cambio, hipoteca…" />
+            </div>
+            <div class="form-field full" id="pr-estado-field" style="display:none;">
+              <label for="pr-estado">Estado del contrato</label>
+              <select id="pr-estado">
+                <option value="vigente">Vigente</option><option value="vencido">Vencido</option>
+                <option value="cancelado">Cancelado (pagado en su totalidad)</option><option value="anulado">Anulado</option>
+              </select>
+            </div>
+            <div class="form-field full">
+              <label>Cronograma de pagos</label>
+              <div class="pr-resumen" id="pr-resumen"></div>
+              <div class="pr-cron-wrap">
+                <table class="pr-cron">
+                  <thead><tr><th>N.º</th><th>Monto a pagar</th><th>Capital</th><th>Interés</th><th>Saldo capital</th><th style="text-align:left;">Fecha de pago</th></tr></thead>
+                  <tbody id="pr-cron-body"><tr><td colspan="6" style="text-align:center; color:var(--gray-500); padding:16px;">Completa monto, cuotas, tasa y fecha de la 1.ª cuota.</td></tr></tbody>
+                  <tfoot id="pr-cron-foot"></tfoot>
+                </table>
+              </div>
+              <div class="hint">Puedes ajustar capital, interés y fecha de cada cuota; el monto a pagar y el saldo se recalculan solos. Al final el saldo capital debe quedar en 0.</div>
+              <button type="button" class="btn btn-tertiary btn-sm" id="pr-recalcular" style="margin-top:6px;">↻ Recalcular cronograma automático</button>
+            </div>
+            <div class="form-field full">
+              <label for="pr-notas">Notas</label>
+              <textarea id="pr-notas"></textarea>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-tertiary" data-modal-close>Cancelar</button>
+          <button type="submit" class="btn btn-primary" id="btn-guardar-prestamo">Guardar contrato</button>
         </div>
       </form>
     </div>

@@ -319,7 +319,7 @@ function chkAnexo(k, label, f) {
 }
 
 /* -------------------------------- pantallas -------------------------------- */
-function inyectarEstilos() {
+export function inyectarEstilos() {
   if (document.getElementById('ct-estilos')) return;
   const s = document.createElement('style');
   s.id = 'ct-estilos';

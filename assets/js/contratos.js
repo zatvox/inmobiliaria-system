@@ -12,8 +12,11 @@ import {
   listTiposServicio, guardarServiciosFijosContrato, planSincronizarMontoFijoServicios, aplicarSincronizacionMontoFijoServicios, guardarSeccionesContrato,
   listCuotasAlquilerPendientes, actualizarMontoCuotasAlquilerPendientes,
   planCronogramaAlquiler, aplicarCronogramaAlquiler,
+  listPrestamos, getPrestamo, savePrestamo, cronogramaBloqueado,
 } from './supabase-data.js';
 import { abrirGenerarContrato } from './contrato-ui.js';
+import { abrirGenerarContratoPrestamo } from './contrato-prestamo-ui.js';
+import { calcularCronograma, recalcularFilas, totalesCronograma, tasaMensual, sumarMeses } from './prestamo-calc.js';
 import { qs, qsa, el, formatCurrency, formatDate, badgeHtml, showToast, openModal, closeModal, validateForm, setLoading, debounce, confirmAction } from './utils.js';
 
 let profile = null;
@@ -44,6 +47,7 @@ async function main() {
   bindToolbar();
   bindFormAlquiler();
   bindFormVenta();
+  bindFormPrestamo();
   await refresh();
 }
 
@@ -60,13 +64,32 @@ function bindTabs() {
 
 function bindToolbar() {
   qs('#btn-nuevo-contrato')?.addEventListener('click', () => {
-    if (activeTab === 'alquiler') openAlquilerModal(); else openVentaModal();
+    if (activeTab === 'alquiler') openModal('modal-tipo-contrato'); else openVentaModal();
   });
+  qsa('#modal-tipo-contrato [data-nuevo]').forEach((b) => b.addEventListener('click', () => {
+    closeModal('modal-tipo-contrato');
+    if (b.dataset.nuevo === 'prestamo') openPrestamoModal(); else openAlquilerModal();
+  }));
   qs('#search-input')?.addEventListener('input', debounce(refresh, 350));
+  // Filtro multiselect Alquiler / Préstamos (ambos marcados = todos).
+  qsa('#filtro-tipo input[type=checkbox]').forEach((c) => c.addEventListener('change', () => {
+    if (!tiposFiltro().length) { c.checked = true; showToast('Deja al menos un tipo seleccionado.', 'info', 2500); return; }
+    actualizarResumenFiltro();
+    refresh();
+  }));
+  document.addEventListener('click', (e) => { const d = qs('#filtro-tipo'); if (d?.open && !d.contains(e.target)) d.open = false; });
+}
+
+const tiposFiltro = () => qsa('#filtro-tipo input[type=checkbox]:checked').map((c) => c.value);
+function actualizarResumenFiltro() {
+  const t = tiposFiltro();
+  qs('#filtro-tipo-resumen').textContent = `Tipo: ${t.length === 2 ? 'Alquiler y préstamos' : t[0] === 'alquiler' ? 'Solo alquiler' : 'Solo préstamos'}`;
 }
 
 async function refresh() {
   const search = qs('#search-input')?.value ?? '';
+  const filtro = qs('#filtro-tipo');
+  if (filtro) filtro.style.display = activeTab === 'alquiler' ? '' : 'none';
   if (activeTab === 'alquiler') await renderAlquiler(search);
   else await renderVenta(search);
 }
@@ -75,19 +98,263 @@ async function refresh() {
 async function renderAlquiler(search = '') {
   const tbody = qs('#alquiler-tbody');
   try {
-    const contratos = await listContratosAlquiler({ search });
+    const tipos = tiposFiltro();
+    const [alq, pres] = await Promise.all([
+      tipos.includes('alquiler') ? listContratosAlquiler({ search }) : Promise.resolve([]),
+      tipos.includes('prestamo') ? listPrestamos({ search }).catch((err) => {
+        console.error(err);
+        showToast('No se pudieron cargar los préstamos: ejecuta el SQL 33 (assets/sql/33_migrations-prestamos.sql) en Supabase.', 'warning', 7000);
+        return [];
+      }) : Promise.resolve([]),
+    ]);
+    const filas = [
+      ...alq.map((c) => ({ tipo: 'alquiler', fecha: c.fecha_inicio ?? '', c })),
+      ...pres.map((p) => ({ tipo: 'prestamo', fecha: p.fecha_desembolso ?? '', c: p })),
+    ].sort((a, b) => String(b.fecha).localeCompare(String(a.fecha)));
     tbody.innerHTML = '';
-    if (!contratos.length) {
+    if (!filas.length) {
       tbody.append(el('tr', {}, [el('td', { colspan: '10' }, [
-        el('div', { class: 'empty-state' }, [el('div', { class: 'icon' }, '📄'), el('p', {}, 'Sin contratos de alquiler todavía.')]),
+        el('div', { class: 'empty-state' }, [el('div', { class: 'icon' }, '📄'), el('p', {}, 'Sin contratos para el filtro elegido.')]),
       ])]));
       return;
     }
-    contratos.forEach((c) => tbody.append(renderRowAlquiler(c)));
+    filas.forEach((f) => tbody.append(f.tipo === 'alquiler' ? renderRowAlquiler(f.c) : renderRowPrestamo(f.c)));
   } catch (err) {
     console.error(err);
-    showToast('No se pudieron cargar los contratos de alquiler.', 'error');
+    showToast('No se pudieron cargar los contratos.', 'error');
   }
+}
+
+function renderRowPrestamo(p) {
+  const cron = p.cronograma ?? [];
+  const ultima = cron.length ? cron[cron.length - 1].fecha_pago : null;
+  const cuota = cron[0]?.cuota ?? 0;
+  const tasaTxt = `${Number(p.tasa_valor)}% ${p.tasa_tipo === 'anual' ? 'anual' : 'mensual'}`;
+  const vista = { estado: p.estado, fecha_inicio: p.fecha_desembolso, fecha_fin: ultima, renovacion_automatica: false };
+  return el('tr', {}, [
+    el('td', {}, '—'),
+    el('td', {}, '—'),
+    el('td', {}, [
+      el('div', { style: 'font-weight:600;' }, [el('span', { class: 'tipo-chip pres' }, 'PRÉSTAMO'), formatCurrency(p.monto, p.moneda)]),
+      el('div', { style: 'font-size:11px; color:var(--gray-500);' }, `${p.n_cuotas} cuotas · ${tasaTxt}`),
+    ]),
+    el('td', {}, [p.prestatario?.nombre ?? '—', el('div', { style: 'font-size:11px; color:var(--gray-500);' }, `Prestamista: ${p.prestamista?.nombre ?? '—'}${p.aval ? ` · Aval: ${p.aval.nombre}` : ''}`)]),
+    el('td', {}, [formatCurrency(cuota, p.moneda), el('div', { style: 'font-size:11px; color:var(--gray-500);' }, 'por cuota')]),
+    el('td', { class: 'n', title: 'Día de pago mensual de la cuota' }, p.dia_vencimiento ? String(p.dia_vencimiento) : '—'),
+    el('td', {}, `${formatDate(p.fecha_desembolso)} → ${ultima ? formatDate(ultima) : '—'}`),
+    el('td', { html: badgeHtml(p.estado) }),
+    celdaVencimiento(vista),
+    el('td', { class: 'actions' }, [
+      el('button', { class: 'btn btn-tertiary btn-sm', title: 'Generar el contrato de préstamo (Word / PDF)', onclick: () => abrirGenerarContratoPrestamo(p.id) }, '📄 Contrato'),
+      el('button', { class: 'btn btn-tertiary btn-sm', 'data-admin-only': '', onclick: () => editPrestamo(p.id) }, 'Editar'),
+    ]),
+  ]);
+}
+
+async function editPrestamo(id) {
+  try {
+    openPrestamoModal(await getPrestamo(id));
+  } catch (err) {
+    console.error(err);
+    showToast('No se pudo cargar el préstamo.', 'error');
+  }
+}
+
+/* ================================ PRÉSTAMO =================================== */
+let prFilas = [];
+let prEdit = null;
+let prBloqueado = false;
+let prFilasOriginales = '';
+const PR_FIN = ['#pr-prestamista', '#pr-prestatario', '#pr-moneda', '#pr-monto', '#pr-ncuotas', '#pr-tasa', '#pr-tasa-tipo', '#pr-fecha-desembolso', '#pr-fecha-primera'];
+const num = (id) => Number(qs(id).value) || 0;
+const hoyISO = () => new Date().toISOString().slice(0, 10);
+
+async function openPrestamoModal(p = null) {
+  const form = qs('#form-prestamo');
+  form.reset();
+  qsa('.form-field', form).forEach((f) => f.classList.remove('invalid'));
+  prEdit = p;
+  prBloqueado = !!p && cronogramaBloqueado(p);
+  qs('#modal-prestamo-title').textContent = p ? 'Editar contrato de préstamo' : 'Nuevo contrato de préstamo';
+
+  const personas = await listPersonas({});
+  const llenar = (id, vacio) => {
+    const s = qs(id);
+    s.innerHTML = `<option value="">${vacio}</option>`;
+    personas.forEach((x) => s.append(el('option', { value: x.id }, `${x.nombre}${x.dni_ruc ? ` · ${x.dni_ruc}` : ''}`)));
+  };
+  llenar('#pr-prestamista', 'Selecciona…');
+  llenar('#pr-prestatario', 'Selecciona…');
+  llenar('#pr-aval', 'Selecciona…');
+  qs('#pr-tiene-aval').checked = false;
+  qs('#pr-aval-field').style.display = 'none';
+  qs('#pr-estado-field').style.display = p ? 'block' : 'none';
+
+  if (p) {
+    qs('#pr-prestamista').value = p.prestamista_id;
+    qs('#pr-prestatario').value = p.prestatario_id;
+    qs('#pr-moneda').value = p.moneda;
+    qs('#pr-monto').value = p.monto;
+    qs('#pr-ncuotas').value = p.n_cuotas;
+    qs('#pr-tasa').value = p.tasa_valor;
+    qs('#pr-tasa-tipo').value = p.tasa_tipo;
+    qs('#pr-fecha-desembolso').value = p.fecha_desembolso;
+    qs('#pr-fecha-primera').value = p.fecha_primera_cuota;
+    qs('#pr-garantia').value = p.garantia ?? '';
+    qs('#pr-notas').value = p.notas ?? '';
+    qs('#pr-estado').value = p.estado;
+    if (p.aval_id) { qs('#pr-tiene-aval').checked = true; qs('#pr-aval-field').style.display = 'block'; qs('#pr-aval').value = p.aval_id; }
+    prFilas = (p.cronograma ?? []).map((f) => ({ nro: f.nro, fecha_pago: f.fecha_pago, cuota: Number(f.cuota), capital: Number(f.capital), interes: Number(f.interes), saldo_capital: Number(f.saldo_capital) }));
+    prFilasOriginales = JSON.stringify(prFilas);
+  } else {
+    qs('#pr-moneda').value = 'PEN';
+    qs('#pr-tasa-tipo').value = 'mensual';
+    qs('#pr-fecha-desembolso').value = hoyISO();
+    qs('#pr-fecha-primera').value = sumarMeses(hoyISO(), 1);
+    prFilas = [];
+    prFilasOriginales = '';
+  }
+  PR_FIN.forEach((id) => { qs(id).disabled = prBloqueado; });
+  const aviso = qs('#pr-bloqueo');
+  aviso.style.display = prBloqueado ? 'block' : 'none';
+  aviso.textContent = prBloqueado ? 'Este préstamo ya tiene cuotas con pagos: monto, tasa, fechas y cronograma quedan bloqueados. Para cambiarlos, anula primero los pagos en Cobranzas. Puedes editar aval, garantía, estado y notas.' : '';
+  qs('#pr-recalcular').style.display = prBloqueado ? 'none' : '';
+  if (!p) recalcularAuto(); else pintarCronograma();
+  openModal('modal-prestamo');
+}
+
+function recalcularAuto() {
+  prFilas = calcularCronograma({
+    monto: num('#pr-monto'), nCuotas: num('#pr-ncuotas'), tasaValor: num('#pr-tasa'), tasaTipo: qs('#pr-tasa-tipo').value,
+    fechaPrimeraCuota: qs('#pr-fecha-primera').value,
+  });
+  pintarCronograma();
+}
+
+const fm = (n) => Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+function actualizarTotalesCronograma() {
+  const monto = num('#pr-monto');
+  const t = totalesCronograma(prFilas);
+  const saldoFinal = prFilas.length ? prFilas[prFilas.length - 1].saldo_capital : 0;
+  const tm = tasaMensual(num('#pr-tasa'), qs('#pr-tasa-tipo').value);
+  const ok = Math.abs(saldoFinal) < 0.005 && Math.abs(t.capital - monto) < 0.005;
+  qs('#pr-resumen').innerHTML = prFilas.length
+    ? `<span>Tasa mensual: <b>${tm.toFixed(4)}%</b></span><span>Total capital: <b>${fm(t.capital)}</b></span><span>Total intereses: <b>${fm(t.interes)}</b></span><span>Total a pagar: <b>${fm(t.cuota)}</b></span>${ok ? '<span style="color:#15803D;">✓ El saldo llega a 0</span>' : `<span style="color:#DC2626;">⚠ Saldo final ${fm(saldoFinal)} (debe ser 0)</span>`}`
+    : '';
+  qs('#pr-cron-foot').innerHTML = prFilas.length ? `<tr><td>Total</td><td>${fm(t.cuota)}</td><td>${fm(t.capital)}</td><td>${fm(t.interes)}</td><td></td><td></td></tr>` : '';
+  prFilas.forEach((f, i) => {
+    const row = qs('#pr-cron-body').children[i];
+    if (!row) return;
+    row.querySelector('.c-cuota').textContent = fm(f.cuota);
+    row.querySelector('.c-saldo').textContent = fm(f.saldo_capital);
+  });
+}
+
+function pintarCronograma() {
+  const body = qs('#pr-cron-body');
+  body.innerHTML = '';
+  if (!prFilas.length) {
+    body.append(el('tr', {}, [el('td', { colspan: '6', style: 'text-align:center; color:var(--gray-500); padding:16px;' }, 'Completa monto, cuotas, tasa y fecha de la 1.ª cuota.')]));
+    actualizarTotalesCronograma();
+    return;
+  }
+  prFilas.forEach((f, i) => {
+    const cap = el('input', { type: 'number', step: '0.01', min: '0' }); cap.value = f.capital; cap.disabled = prBloqueado;
+    const int = el('input', { type: 'number', step: '0.01', min: '0' }); int.value = f.interes; int.disabled = prBloqueado;
+    const fec = el('input', { type: 'date' }); fec.value = f.fecha_pago; fec.disabled = prBloqueado;
+    const editar = () => {
+      prFilas[i].capital = Number(cap.value) || 0;
+      prFilas[i].interes = Number(int.value) || 0;
+      prFilas = recalcularFilas(prFilas, num('#pr-monto'));
+      actualizarTotalesCronograma();
+    };
+    cap.addEventListener('input', editar);
+    int.addEventListener('input', editar);
+    fec.addEventListener('change', () => { prFilas[i].fecha_pago = fec.value; });
+    body.append(el('tr', {}, [
+      el('td', {}, String(f.nro)),
+      el('td', { class: 'c-cuota', style: 'font-weight:600;' }, fm(f.cuota)),
+      el('td', {}, [cap]), el('td', {}, [int]),
+      el('td', { class: 'c-saldo' }, fm(f.saldo_capital)),
+      el('td', {}, [fec]),
+    ]));
+  });
+  actualizarTotalesCronograma();
+}
+
+function bindFormPrestamo() {
+  const form = qs('#form-prestamo');
+  if (!form) return;
+  ['#pr-monto', '#pr-ncuotas', '#pr-tasa', '#pr-tasa-tipo', '#pr-fecha-primera'].forEach((id) => {
+    qs(id).addEventListener('input', () => { if (!prBloqueado) recalcularAuto(); });
+    qs(id).addEventListener('change', () => { if (!prBloqueado) recalcularAuto(); });
+  });
+  const fd = qs('#pr-fecha-desembolso');
+  fd.addEventListener('focus', () => { fd.dataset.previo = fd.value; });
+  fd.addEventListener('change', () => {
+    // Si la 1.ª cuota seguía el patrón "desembolso + 1 mes", se mueve con él.
+    const fp = qs('#pr-fecha-primera');
+    if (!prBloqueado && fd.value && (!fp.value || (fd.dataset.previo && fp.value === sumarMeses(fd.dataset.previo, 1)))) {
+      fp.value = sumarMeses(fd.value, 1);
+      recalcularAuto();
+    }
+  });
+  qs('#pr-recalcular').addEventListener('click', recalcularAuto);
+  qs('#pr-tiene-aval').addEventListener('change', (e) => {
+    qs('#pr-aval-field').style.display = e.target.checked ? 'block' : 'none';
+    if (!e.target.checked) qs('#pr-aval').value = '';
+  });
+  qs('#pr-tasa-tipo').addEventListener('change', () => {
+    qs('#pr-tasa-hint').textContent = qs('#pr-tasa-tipo').value === 'anual' ? 'Tasa anual: se convierte a mensual dividiendo entre 12.' : 'Tasa mensual aplicada sobre el monto del préstamo en cada cuota.';
+  });
+
+  form.addEventListener('submit', async (evt) => {
+    evt.preventDefault();
+    if (!validateForm(form)) return;
+    if (qs('#pr-prestamista').value === qs('#pr-prestatario').value) { showToast('El prestamista y el prestatario no pueden ser la misma persona.', 'error'); return; }
+    const monto = num('#pr-monto');
+    if (!prFilas.length) { showToast('No hay cronograma: revisa monto, cuotas, tasa y fecha de la 1.ª cuota.', 'error'); return; }
+    const t = totalesCronograma(prFilas);
+    const saldoFinal = prFilas[prFilas.length - 1].saldo_capital;
+    if (Math.abs(saldoFinal) > 0.005 || Math.abs(t.capital - monto) > 0.005) { showToast(`El capital del cronograma (${fm(t.capital)}) debe sumar el monto (${fm(monto)}) y el saldo final llegar a 0.`, 'error', 6000); return; }
+    if (prFilas.some((f, i) => i && f.fecha_pago < prFilas[i - 1].fecha_pago)) { showToast('Las fechas de pago deben ir en orden cronológico.', 'error'); return; }
+
+    const editingId = prEdit?.id ?? '';
+    const cambioCronograma = !prBloqueado && editingId && (JSON.stringify(prFilas) !== prFilasOriginales || prEdit.monto != monto
+      || prEdit.n_cuotas !== num('#pr-ncuotas') || Number(prEdit.tasa_valor) !== num('#pr-tasa') || prEdit.tasa_tipo !== qs('#pr-tasa-tipo').value);
+    if (cambioCronograma && !confirmAction('Cambiaste el monto, la tasa, las cuotas o el cronograma.\n\nSe ANULARÁN las cuotas pendientes actuales de este préstamo (ninguna tiene pagos) y se crearán las nuevas. ¿Continuar?')) return;
+
+    const payload = {
+      aval_id: qs('#pr-tiene-aval').checked ? (qs('#pr-aval').value || null) : null,
+      garantia: qs('#pr-garantia').value.trim() || null,
+      notas: qs('#pr-notas').value.trim() || null,
+    };
+    if (editingId) payload.estado = qs('#pr-estado').value;
+    if (!prBloqueado) {
+      Object.assign(payload, {
+        prestamista_id: qs('#pr-prestamista').value, prestatario_id: qs('#pr-prestatario').value,
+        moneda: qs('#pr-moneda').value, monto, n_cuotas: prFilas.length,
+        tasa_valor: num('#pr-tasa'), tasa_tipo: qs('#pr-tasa-tipo').value,
+        tasa_mensual: Math.round(tasaMensual(num('#pr-tasa'), qs('#pr-tasa-tipo').value) * 1e6) / 1e6,
+        fecha_desembolso: qs('#pr-fecha-desembolso').value, fecha_primera_cuota: prFilas[0].fecha_pago,
+        dia_vencimiento: Number(prFilas[0].fecha_pago.slice(8, 10)),
+      });
+    }
+    const btn = qs('#btn-guardar-prestamo');
+    setLoading(btn, true);
+    try {
+      await savePrestamo(payload, prFilas, { id: editingId, reemplazarCronograma: !!cambioCronograma });
+      showToast(editingId ? 'Préstamo actualizado.' : `Préstamo creado. Se generaron ${prFilas.length} cuotas por cobrar (serie PRES).`, 'success');
+      closeModal('modal-prestamo');
+      await refresh();
+    } catch (err) {
+      console.error(err);
+      showToast(/contratos_prestamo|prestamo_cronograma|origen/.test(err?.message ?? '') ? 'Falta ejecutar el SQL 33 (assets/sql/33_migrations-prestamos.sql) en Supabase.' : 'No se pudo guardar el préstamo.', 'error', 7000);
+    } finally {
+      setLoading(btn, false);
+    }
+  });
 }
 
 // Barra de vencimiento de horizonte fijo: todas las filas se miden contra la

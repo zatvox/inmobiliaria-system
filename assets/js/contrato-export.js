@@ -44,6 +44,12 @@ export const CSS_CONTRATO = `
 .ct-photos img { max-width:48%; max-height:3.4in; object-fit:contain; border:1px solid #ccc; }
 .ct-break { break-after:page; page-break-after:always; height:0; }
 .ct-miss { background:#FFF3B0; }
+.ct-tabla { width:100%; border-collapse:collapse; margin:6pt 0 10pt; font-size:${M.cuerpo - 0.5}pt; text-align:right; }
+.ct-tabla th, .ct-tabla td { border:1px solid #000; padding:3pt 6pt; }
+.ct-tabla th { background:#E5E7EB; text-align:center; font-weight:700; }
+.ct-tabla tr { break-inside:avoid; page-break-inside:avoid; }
+.ct-tabla .c { text-align:center; } .ct-tabla .r { text-align:right; }
+.ct-tabla tfoot td { font-weight:700; background:#F3F4F6; }
 `;
 
 const nodoRuns = (md) => parseMd(md).map((r) => {
@@ -95,6 +101,18 @@ export function renderPreview(blocks, { fotos = [] } = {}) {
           });
           t.append(tr);
         });
+        root.append(t); break;
+      }
+      case 'table': {
+        const t = document.createElement('table'); t.className = 'ct-tabla';
+        const fila = (celdas, tag) => {
+          const tr = document.createElement('tr');
+          celdas.forEach((txt, i) => { const c = document.createElement(tag); c.textContent = txt; if (tag === 'td') c.className = b.align?.[i] ?? 'r'; tr.append(c); });
+          return tr;
+        };
+        const th = document.createElement('thead'); th.append(fila(b.head, 'th')); t.append(th);
+        const tb = document.createElement('tbody'); b.rows.forEach((r) => tb.append(fila(r, 'td'))); t.append(tb);
+        if (b.foot) { const tf = document.createElement('tfoot'); tf.append(fila(b.foot, 'td')); t.append(tf); }
         root.append(t); break;
       }
       case 'pagebreak': root.append(Object.assign(document.createElement('div'), { className: 'ct-break' })); break;
@@ -209,6 +227,27 @@ export async function generarDocx(blocks, { fotos = [], docxLib = null } = {}) {
           })),
         }));
         children.push(new Table({ width: { size: 9000, type: WidthType.DXA }, columnWidths: [4500, 4500], borders: { top: sinBorde, bottom: sinBorde, left: sinBorde, right: sinBorde, insideHorizontal: sinBorde, insideVertical: sinBorde }, rows: filas }));
+        break;
+      }
+      case 'table': {
+        const ncol = b.head.length, ancho = Math.floor(9000 / ncol);
+        const borde = { style: BorderStyle.SINGLE, size: 4, color: '000000' };
+        const bd = { top: borde, bottom: borde, left: borde, right: borde };
+        const celda = (txt, i, { head = false, bold = false } = {}) => new TableCell({
+          borders: bd, width: { size: ancho, type: WidthType.DXA },
+          shading: head ? { fill: 'E5E7EB' } : undefined,
+          children: [new Paragraph({
+            alignment: head || (b.align?.[i] ?? 'r') === 'c' ? AlignmentType.CENTER : AlignmentType.RIGHT, spacing: { after: 0 },
+            children: [new TextRun({ text: String(txt), bold: head || bold, font: FONT, size: (M.cuerpo - 0.5) * 2 })],
+          })],
+        });
+        const rows = [
+          new TableRow({ tableHeader: true, cantSplit: true, children: b.head.map((h, i) => celda(h, i, { head: true })) }),
+          ...b.rows.map((r) => new TableRow({ cantSplit: true, children: r.map((x, i) => celda(x, i)) })),
+          ...(b.foot ? [new TableRow({ cantSplit: true, children: b.foot.map((x, i) => celda(x, i, { bold: true })) })] : []),
+        ];
+        children.push(new Table({ width: { size: ancho * ncol, type: WidthType.DXA }, columnWidths: b.head.map(() => ancho), rows }));
+        children.push(new Paragraph({ spacing: { after: 120 }, children: [] }));
         break;
       }
       case 'pagebreak':

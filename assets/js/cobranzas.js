@@ -22,7 +22,7 @@ let cuotasCache = [];
 let propiedadesCache = [];
 let tiposServicioCache = [];
 
-const ORIGEN_LABELS = { alquiler: 'Alquiler', venta: 'Venta', servicio: 'Servicio', mantenimiento: 'Mantenimiento' };
+const ORIGEN_LABELS = { alquiler: 'Alquiler', venta: 'Venta', servicio: 'Servicio', mantenimiento: 'Mantenimiento', prestamo: 'Préstamo' };
 
 // Quita el nombre del inmueble del inicio de la referencia (solo visual).
 function refSinInmueble(ref) {

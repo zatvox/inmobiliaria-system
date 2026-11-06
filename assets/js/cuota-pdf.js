@@ -46,7 +46,7 @@ function numeroALetras(monto, moneda = 'PEN') {
 
 const COLORES_SERIE = { ALQ: '#1D4ED8', SAGUA: '#0891B2', SLUZ: '#D97706' };
 // Misma regla que el SQL: alquiler = 'ALQ'; servicio = 'S' + nombre sin tildes/espacios (máx. 6).
-export const claveTipoCuota = (origen, nombreServicio = '') => (origen === 'mantenimiento' ? 'MANT' : origen === 'servicio'
+export const claveTipoCuota = (origen, nombreServicio = '') => (origen === 'prestamo' ? 'PRES' : origen === 'mantenimiento' ? 'MANT' : origen === 'servicio'
   ? 'S' + nombreServicio.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^A-Za-z]/g, '').toUpperCase().slice(0, 6)
   : 'ALQ');
 const cargarTipos = async () => {
@@ -85,11 +85,13 @@ function htmlCuotaBloque(d) {
   const esServicio = cuota.origen === 'servicio';
   const tipoServ = detalle?.calculo_periodo?.tipo_servicio?.nombre ?? '';
   const esMant = cuota.origen === 'mantenimiento';
-  const concepto = cuota.concepto || (esServicio ? `Servicio de ${tipoServ}` : (esMant ? 'Mantenimiento' : 'Renta mensual'));
+  const esPres = cuota.origen === 'prestamo';
+  const concepto = cuota.concepto || (esServicio ? `Servicio de ${tipoServ}` : (esMant ? 'Mantenimiento' : (esPres ? 'Cuota de préstamo' : 'Renta mensual')));
   // Periodo que cubre: alquiler = del día de vencimiento al mismo día del mes siguiente; servicio = mes del consumo.
   const periodo = esServicio
     ? periodoLargo(detalle?.calculo_periodo?.periodo)
     : esMant ? 'Cuota única'
+    : esPres ? `Cuota ${cuota.numero_cuota ?? ''}${d.prestamo?.n_cuotas ? ` de ${d.prestamo.n_cuotas}` : ''}`
     : `${dmy(cuota.fecha_vencimiento)} al ${sumarMes(cuota.fecha_vencimiento)}`;
   const importe = Number(cuota.monto) + Number(cuota.mora_aplicada || 0);
   const pagos = (cuota.pagos ?? []).filter((p) => p.estado !== 'anulado');
@@ -131,7 +133,7 @@ function htmlCuotaBloque(d) {
   <div class="cuota" style="--c:${color}; --t1:${tinte(color, 0.08)}; --t2:${tinte(color, 0.28)};">
     <div class="top">
       <div class="inq">
-        <div class="k">INQUILINO</div>
+        <div class="k">${esPres ? 'PRESTATARIO' : 'INQUILINO'}</div>
         <div class="inq-n">${esc(inq.nombre ?? '—')}</div>
         <div class="inq-d">${esc([inq.tipo_documento, inq.dni_ruc].filter(Boolean).join(' '))}${inq.telefono ? ` &nbsp;·&nbsp; Cel. ${esc(inq.telefono)}` : ''}</div>
       </div>
@@ -151,9 +153,13 @@ function htmlCuotaBloque(d) {
 
     <div class="box">
       <div class="bc">
+        ${esPres ? `
+        <div class="bf"><span class="k">PRESTAMISTA</span><b>${esc(d.propietario?.nombre ?? '—')}</b></div>
+        <div class="bf"><span class="k">PRÉSTAMO</span><b>${sim} ${fmt(d.prestamo?.monto ?? 0)}</b></div>
+        <div class="bf"><span class="k">DESGLOSE</span><span>Capital ${sim} ${fmt(d.prestamo?.capital ?? 0)} · Interés ${sim} ${fmt(d.prestamo?.interes ?? 0)}</span></div>` : `
         <div class="bf"><span class="k">INMUEBLE</span><b>${esc(propiedad?.nombre_referencial ?? '—')}</b></div>
         <div class="bf"><span class="k">SECCIÓN</span><b>${esc(d.secciones || '—')}</b></div>
-        <div class="bf"><span class="k">DIRECCIÓN</span><span>${esc([propiedad?.direccion, propiedad?.distrito].filter(Boolean).join(', '))}</span></div>
+        <div class="bf"><span class="k">DIRECCIÓN</span><span>${esc([propiedad?.direccion, propiedad?.distrito].filter(Boolean).join(', '))}</span></div>`}
       </div>
       <div class="bc">
         <div class="bf"><span class="k">VENCIMIENTO</span><b>${esc(dmy(cuota.fecha_vencimiento))}</b></div>

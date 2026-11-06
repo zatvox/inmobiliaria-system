@@ -641,8 +641,9 @@ export async function listCuotas({ origen = '', estado = '', search = '', propie
   const idsAlquiler = data.filter((c) => (c.origen === 'alquiler' || c.origen === 'mantenimiento') && c.contrato_id).map((c) => c.contrato_id);
   const idsVenta = data.filter((c) => c.origen === 'venta' && c.contrato_id).map((c) => c.contrato_id);
   const idsDetalle = data.filter((c) => c.origen === 'servicio' && c.calculo_servicio_detalle_id).map((c) => c.calculo_servicio_detalle_id);
+  const idsPrestamo = data.filter((c) => c.origen === 'prestamo' && c.contrato_id).map((c) => c.contrato_id);
 
-  const [alquileres, ventas, detalles] = await Promise.all([
+  const [alquileres, ventas, detalles, prestamos] = await Promise.all([
     idsAlquiler.length
       ? supabase.from('contratos_alquiler').select('id, inquilino:inquilino_id(nombre, telefono), seccion:seccion_id(nombre, propiedad_id, propiedades(nombre_referencial)), secciones_contrato:contratos_alquiler_secciones(seccion:seccion_id(nombre))').in('id', idsAlquiler)
       : Promise.resolve({ data: [] }),
@@ -652,8 +653,12 @@ export async function listCuotas({ origen = '', estado = '', search = '', propie
     idsDetalle.length
       ? supabase.from('calculo_servicios_detalle').select('id, seccion:seccion_id(nombre, propiedad_id, propiedades(nombre_referencial)), calculo_periodo:calculo_periodo_id(periodo, tipo_servicio_id, tipo_servicio:tipo_servicio_id(nombre)), contrato_alquiler:contrato_alquiler_id(inquilino:inquilino_id(nombre, telefono), seccion:seccion_id(nombre), secciones_contrato:contratos_alquiler_secciones(seccion:seccion_id(nombre)))').in('id', idsDetalle)
       : Promise.resolve({ data: [] }),
+    idsPrestamo.length
+      ? supabase.from('contratos_prestamo').select('id, prestatario:prestatario_id(nombre, telefono), prestamista:prestamista_id(nombre)').in('id', idsPrestamo)
+      : Promise.resolve({ data: [] }),
   ]);
 
+  const mapPrestamo = new Map((prestamos.data ?? []).map((p) => [p.id, p]));
   const mapAlquiler = new Map((alquileres.data ?? []).map((a) => [a.id, a]));
   const mapVenta = new Map((ventas.data ?? []).map((v) => [v.id, v]));
   const mapDetalle = new Map((detalles.data ?? []).map((d) => [d.id, d]));
@@ -677,6 +682,11 @@ export async function listCuotas({ origen = '', estado = '', search = '', propie
       propId = a?.seccion?.propiedad_id ?? null;
       propiedadNombre = a?.seccion?.propiedades?.nombre_referencial ?? '—';
       referencia = a ? `${a.seccion?.propiedades?.nombre_referencial ?? ''} · ${nombresSeccionesContrato(a, a.seccion?.nombre)}` : '—';
+    } else if (c.origen === 'prestamo') {
+      const p = mapPrestamo.get(c.contrato_id);
+      deudor = p?.prestatario?.nombre ?? '—';
+      telefono = p?.prestatario?.telefono ?? null;
+      referencia = p ? `Préstamo · prestamista ${p.prestamista?.nombre ?? '—'}` : '—';
     } else if (c.origen === 'venta') {
       const v = mapVenta.get(c.contrato_id);
       deudor = v?.comprador?.nombre ?? '—';
@@ -1597,6 +1607,19 @@ export async function getDatosCuotaDocumento(cuotaId) {
     seccion:seccion_id(id, nombre, propiedad_id, propiedades(nombre_referencial, direccion, distrito, propietario:propietario_id(nombre, tipo_documento, dni_ruc))),
     secciones_contrato:contratos_alquiler_secciones(seccion:seccion_id(nombre))`;
   let contrato = null, detalle = null;
+  if (cuota.origen === 'prestamo') {
+    // Se adapta al formato que espera el PDF de cuotas (inquilino = prestatario, propietario = prestamista).
+    const { data: p } = await supabase.from('contratos_prestamo')
+      .select('id, moneda, monto, n_cuotas, fecha_desembolso, prestatario:prestatario_id(nombre, tipo_documento, dni_ruc, telefono), prestamista:prestamista_id(nombre, tipo_documento, dni_ruc)')
+      .eq('id', cuota.contrato_id).single();
+    const { data: cron } = await supabase.from('prestamo_cronograma').select('nro, capital, interes, saldo_capital').eq('cuota_id', cuotaId).maybeSingle();
+    const { data: ult } = await supabase.from('prestamo_cronograma').select('fecha_pago').eq('prestamo_id', cuota.contrato_id).order('nro', { ascending: false }).limit(1);
+    contrato = { moneda: p?.moneda ?? 'PEN', inquilino: p?.prestatario ?? {}, fecha_inicio: p?.fecha_desembolso, fecha_fin: ult?.[0]?.fecha_pago ?? null };
+    return {
+      cuota, contrato, detalle: null, detalleRows: [], secciones: '', propiedad: null, propietario: p?.prestamista ?? null,
+      prestamo: { ...p, ...(cron ?? {}) },
+    };
+  }
   if (cuota.origen === 'alquiler' || cuota.origen === 'mantenimiento') {
     ({ data: contrato } = await supabase.from('contratos_alquiler').select(selContrato).eq('id', cuota.contrato_id).single());
   } else if (cuota.origen === 'servicio') {
@@ -1773,5 +1796,97 @@ export async function saveEquipo(payload, id = '') {
 }
 export async function deleteEquipo(id) {
   const { error } = await supabase.from('equipos_edificio').delete().eq('id', id);
+  if (error) throw error;
+}
+
+
+/* ===================== CONTRATOS DE PRÉSTAMO (SQL 33) ===================== */
+const PRESTAMO_SEL = `id, prestamista_id, prestatario_id, aval_id, moneda, monto, n_cuotas, tasa_valor, tasa_tipo, tasa_mensual,
+  fecha_desembolso, fecha_primera_cuota, dia_vencimiento, garantia, estado, notas, datos_contrato, created_at,
+  prestamista:prestamista_id(id, nombre, tipo_documento, dni_ruc, telefono, email, direccion),
+  prestatario:prestatario_id(id, nombre, tipo_documento, dni_ruc, telefono, email, direccion),
+  aval:aval_id(id, nombre, tipo_documento, dni_ruc, telefono, direccion),
+  cronograma:prestamo_cronograma(id, nro, fecha_pago, cuota, capital, interes, saldo_capital, cuota_id, cuota_ref:cuota_id(id, estado, monto, nro_cobro, pagos(monto, estado)))`;
+
+function ordenarCronograma(p) {
+  if (p?.cronograma) p.cronograma.sort((a, b) => a.nro - b.nro);
+  return p;
+}
+
+export async function listPrestamos({ search = '' } = {}) {
+  const { data, error } = await supabase.from('contratos_prestamo').select(PRESTAMO_SEL).order('fecha_desembolso', { ascending: false });
+  if (error) throw error;
+  let rows = (data ?? []).map(ordenarCronograma);
+  if (search) {
+    const s = search.toLowerCase();
+    rows = rows.filter((p) => p.prestatario?.nombre?.toLowerCase().includes(s) || p.prestamista?.nombre?.toLowerCase().includes(s));
+  }
+  return rows;
+}
+
+export async function getPrestamo(id) {
+  const { data, error } = await supabase.from('contratos_prestamo').select(PRESTAMO_SEL).eq('id', id).single();
+  if (error) throw error;
+  return ordenarCronograma(data);
+}
+
+// ¿Alguna cuota del cronograma ya tiene pagos o salió de "pendiente"? → el cronograma queda bloqueado.
+export function cronogramaBloqueado(prestamo) {
+  return (prestamo?.cronograma ?? []).some((f) => {
+    const c = f.cuota_ref;
+    if (!c) return false;
+    const pagado = (c.pagos ?? []).some((p) => p.estado !== 'anulado' && Number(p.monto) > 0);
+    return pagado || ['pagada', 'parcial'].includes(c.estado);
+  });
+}
+
+async function insertarCronogramaYCuotas(prestamoId, filas, nCuotas) {
+  for (const f of filas) {
+    const { data: cuota, error: e1 } = await supabase.from('cuotas').insert({
+      origen: 'prestamo', contrato_id: prestamoId, numero_cuota: f.nro,
+      concepto: `Cuota ${f.nro}/${nCuotas} de préstamo`, monto: f.cuota, fecha_vencimiento: f.fecha_pago, estado: 'pendiente',
+    }).select('id').single();
+    if (e1) throw e1;
+    const { error: e2 } = await supabase.from('prestamo_cronograma').insert({
+      prestamo_id: prestamoId, nro: f.nro, fecha_pago: f.fecha_pago, cuota: f.cuota, capital: f.capital,
+      interes: f.interes, saldo_capital: f.saldo_capital, cuota_id: cuota.id,
+    });
+    if (e2) throw e2;
+  }
+}
+
+/**
+ * Crea o actualiza un préstamo. `filas` = cronograma calculado (solo se usa al crear
+ * o si `reemplazarCronograma`). Las cuotas viejas NUNCA se borran: se anulan.
+ */
+export async function savePrestamo(payload, filas, { id = '', reemplazarCronograma = false } = {}) {
+  let prestamo;
+  if (id) {
+    const { data, error } = await supabase.from('contratos_prestamo').update(payload).eq('id', id).select().single();
+    if (error) throw error;
+    prestamo = data;
+    if (reemplazarCronograma) {
+      const { data: viejas, error: e0 } = await supabase.from('prestamo_cronograma').select('id, cuota_id').eq('prestamo_id', id);
+      if (e0) throw e0;
+      const cuotaIds = (viejas ?? []).map((v) => v.cuota_id).filter(Boolean);
+      if (cuotaIds.length) {
+        const { error: e1 } = await supabase.from('cuotas').update({ estado: 'anulada' }).in('id', cuotaIds);
+        if (e1) throw e1;
+      }
+      const { error: e2 } = await supabase.from('prestamo_cronograma').delete().eq('prestamo_id', id);
+      if (e2) throw e2;
+      await insertarCronogramaYCuotas(id, filas, payload.n_cuotas);
+    }
+  } else {
+    const { data, error } = await supabase.from('contratos_prestamo').insert(payload).select().single();
+    if (error) throw error;
+    prestamo = data;
+    await insertarCronogramaYCuotas(prestamo.id, filas, payload.n_cuotas);
+  }
+  return prestamo;
+}
+
+export async function updatePrestamoDatos(id, datos_contrato) {
+  const { error } = await supabase.from('contratos_prestamo').update({ datos_contrato }).eq('id', id);
   if (error) throw error;
 }
